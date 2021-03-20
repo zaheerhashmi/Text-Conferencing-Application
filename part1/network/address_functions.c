@@ -1,7 +1,11 @@
 /**
  *  Author: Harris Zheng
  *  Date: March 19th, 2021
- *  Description: Network functions that we may use in the client and server.
+ *  Description: 
+ *  
+ *      Network functions that we may use in the client and server. These do not
+ *      include functions that only work in one of the environments aforementionned.
+ * 
  */
 
 #include <stdio.h>
@@ -19,7 +23,7 @@
 #include <assert.h>
 
 // Our personal libraries 
-#include "network_functions.h"
+#include "address_functions.h"
 #include "constants.h"
 #include "client.h"
 
@@ -36,26 +40,6 @@ void init_hints(struct addrinfo * hints){
     hints -> ai_socktype = SOCK_STREAM;
     hints -> ai_flags = AI_NUMERICHOST; // Accept numbers-and-dots notation only
 }
-
-void construct_packet(struct Message packetStruct, packet_t type, char * finalPacket){
-    /**
-     * Args: message_struct, final_packet
-     * Description: Process the packet so that it is ready to send.
-     */   
-    assert(finalPacket != NULL);
-    strcpy(packetStruct.source, info.IP);
-    strcat(packetStruct.source, my_username);
-    sprintf(packetStruct.type, "%d", type);
-    sprintf(packetStruct.size, "%d", strlen(packetStruct.data));
-    
-    strcpy(finalPacket, packetStruct.type);
-    strcat(finalPacket, ":");
-    strcat(finalPacket, packetStruct.size);
-    strcat(finalPacket, ":");
-    strcat(finalPacket, packetStruct.source);
-    strcat(finalPacket, ":");
-    strcat(finalPacket, packetStruct.data);
-} 
 
 void deconstruct_packet(struct Message packetStruct, char * receivedPacket){
     int i;

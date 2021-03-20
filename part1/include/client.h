@@ -1,4 +1,5 @@
 #include "constants.h"
+#include "address_functions.h"
 #ifndef _CLIENT_H_
 #define _CLIENT_H_
 
@@ -17,7 +18,8 @@ extern struct IPInfo info;
 /** -------------------------------------------
  *  Client Functions
  * -------------------------------------------- */
-void login(int nargs, char ** args, enum state *);
+void construct_packet_client(struct Message, packet_t type, char * finalPacket);
+sock_t login(int nargs, char ** args, enum state *);
 void logout(int nargs, char ** args, enum state *);
 void join_session(int nargs, char ** args, enum state *);
 void leave_session(int nargs, char ** args, enum state *);

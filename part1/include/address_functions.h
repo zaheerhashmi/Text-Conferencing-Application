@@ -16,7 +16,7 @@ struct Message {
     unsigned char source[INPUT_LENGTH];
     unsigned char data[MAXBUFLEN];
 };
-
+extern struct IPInfo info;
 
 /** ------------------------------
  * All possible types of packets
@@ -37,8 +37,6 @@ enum packet_type{
     QU_ACK
 };
 
-typedef int packet_t;
-
 /** -------------------------------------------
  * Get IP and hostname of the current computer
  * ------------------------------------------- */  
@@ -48,7 +46,6 @@ void init_hints(struct addrinfo *);
 /** ---------------------------------------------------------------------
  *  General Functions for Packet Construction and Packet Send-and-Receives
  * ----------------------------------------------------------------------*/
-void construct_packet(struct Message packetStruct, packet_t type, char * finalPacket);
 void deconstruct_packet(struct Message packetStruct, char * receivedPacket);
 void acknowledge(struct Message packetStruct);
 void send_n_receive(int sockfd, char * finalPacket);

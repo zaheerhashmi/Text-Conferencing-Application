@@ -15,8 +15,8 @@
 #include <assert.h>
 
 #include "client.h"
-#include "network_functions.h"
 #include "constants.h"
+#include "address_functions.h"
 
 char my_username[INPUT_LENGTH];
 
@@ -30,8 +30,28 @@ void load_login_info(struct Message packetStruct, char * username, char * passwo
 }
 
 
+void construct_packet_client(struct Message packetStruct, packet_t type, char * finalPacket){
+    /**
+     * Args: message_struct, final_packet
+     * Description: Process the packet so that it is ready to send.
+     */   
+    assert(finalPacket != NULL);
+    strcpy(packetStruct.source, info.IP);
+    strcat(packetStruct.source, my_username);
+    sprintf(packetStruct.type, "%d", type);
+    sprintf(packetStruct.size, "%d", strlen(packetStruct.data));
+    
+    strcpy(finalPacket, packetStruct.type);
+    strcat(finalPacket, ":");
+    strcat(finalPacket, packetStruct.size);
+    strcat(finalPacket, ":");
+    strcat(finalPacket, packetStruct.source);
+    strcat(finalPacket, ":");
+    strcat(finalPacket, packetStruct.data);
+} 
+
 /* This function most likely has to return the socket that we want to access */
-void login(int nargs, char ** argv, enum state * clientState){
+sock_t login(int nargs, char ** argv, enum state * clientState){
     /**
      * Args: Client ID, Password, Server-IP, Server-Port
      * Description: Log into the server at the given address and port. The
@@ -39,7 +59,7 @@ void login(int nargs, char ** argv, enum state * clientState){
      */
     if (nargs != 5){
         printf(___space___(Usage: /login <client ID> <password> <server-IP> <server-port>\n));
-        return; 
+        return -1; 
     } 
 
    
@@ -68,7 +88,7 @@ void login(int nargs, char ** argv, enum state * clientState){
     /* Read necessary parameters and construct the finalPacket */
     struct Message messageInfo;
     load_login_info(messageInfo, argv[1], argv[2]); // load username and password into packet;
-    construct_packet(messageInfo, LOGIN, finalPacket);
+    construct_packet_client(messageInfo, LOGIN, finalPacket);
 
     /**
      * SEND DATA PACKET TO SERVER 
@@ -254,7 +274,9 @@ void login(int nargs, char ** argv, enum state * clientState){
 }
 
 void logout(int nargs, char ** args, enum state * clientState){
-
+    /**
+     *  When we logout, we close our connection with the server and end our conservation. 
+     */
 
 }
 

@@ -15,7 +15,7 @@
 
 #include "constants.h"
 #include "client.h"
-#include "network_functions.h"
+#include "address_functions.h"
 
 struct IPInfo info;
 void print_menu(){

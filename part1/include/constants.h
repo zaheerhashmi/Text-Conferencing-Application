@@ -6,4 +6,7 @@
 #define STR(x) #x
 #define ___space___(x) ("\n"#x"\n")
 
+typedef int sock_t;
+typedef int packet_t;
+
 #endif

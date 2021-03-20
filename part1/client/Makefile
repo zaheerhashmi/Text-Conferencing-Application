@@ -2,7 +2,7 @@ CC	= gcc
 CFLAGS = -g -I../include ## -g for debugger, -I for adding path to include. This -I path is only "remembered" by the output executable, 
 ## and not actually added to the cpp include paths..
 
-CLIENT_OBJFILES = client.o client_functions.o network_functions.o
+CLIENT_OBJFILES = client.o client_functions.o address_functions.o
 CLIENT = client
 VPATH=../network ## Any path under the VPATH, whose paths are delimited by colons, are searched for cpp files that match .o files
 all: $(CLIENT)
