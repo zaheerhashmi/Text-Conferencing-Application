@@ -274,10 +274,11 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                 printf("Client: %s has already logged in \n",registeredClientList[i].clientID);
 
                 // Send a NACK to the client //
-                responseMessage.type = "LO_NAK";
-                responseMessage.data = "<You have already logged in>";
-                responseMessage.size = sizeof(responseMessage.data);
-                responseMessage.source = clientID;
+                
+                sprintf(responseMessage.type,"%d",LO_NAK);
+                strcpy(responseMessage.data,"You have already logged in");
+                sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                strcpy(responseMessage.source,clientID);
 
                 char* acknowledgement = strcat(responseMessage.type,":");
                 acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -307,11 +308,11 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                                                             remoteIP, INET6_ADDRSTRLEN); 
 
                         // Send login acknowledgement // 
-                        responseMessage.type = LO_ACK;
-                        responseMessage.data = "<Login Successful>";
-                        responseMessage.size = sizeof(responseMessage.data);
-                        responseMessage.source = clientID;
-
+                        sprintf(responseMessage.type,"%d",LO_ACK);
+                        strcpy(responseMessage.data,"Login Successful");
+                        sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                        strcpy(responseMessage.source,clientID);
+                       
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
                         acknowledgement = strcat(acknowledgement,":");
@@ -329,10 +330,11 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
     else{
         // ID and passwords do not exist in the register table // 
          // Send login acknowledgement // 
-                        responseMessage.type = LO_NAK;
-                        responseMessage.data = "<Invalid Username or Password>";
-                        responseMessage.size = sizeof(responseMessage.data);
-                        responseMessage.source = clientID;
+
+                        sprintf(responseMessage.type,"%d",LO_NAK);
+                        strcpy(responseMessage.data,"Invalid Username or Password");
+                        sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                        strcpy(responseMessage.source,clientID);
 
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -383,11 +385,10 @@ void newsess_handler(int clientFD, fd_set* master){
             temp = i;
         
         // Send Acknowledgement of creation of a new session // 
-
-        responseMessage.type = NS_ACK;
-        responseMessage.data = registeredClientList[temp]; // Session ID
-        responseMessage.size = sizeof(responseMessage.data);
-        responseMessage.source = clientID;
+         sprintf(responseMessage.type,"%d",NS_ACK);
+         sprintf(responseMessage.data,"%d",registeredClientList[temp]); // Session ID
+         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+         strcpy(responseMessage.source,clientID);
 
           char* acknowledgement = strcat(responseMessage.type,":");
           acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -456,10 +457,12 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     if(validSession){
         registeredClientList[i].sessionID = sessionID;
         // Send an ACK for session joined // 
-                        responseMessage.type = JN_ACK;
-                        responseMessage.data = temp;
-                        responseMessage.size = sizeof(responseMessage.data);
-                        responseMessage.source = clientID;
+
+                sprintf(responseMessage.type,"%d",JN_ACK);
+                strcpy(responseMessage.data,temp);
+                sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                strcpy(responseMessage.source,clientID);
+
 
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -474,11 +477,13 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
 
     else{
         // Send a NACK // 
-                        responseMessage.type = JN_NAK;
-                        responseMessage.data = strcat(temp,",");
-                        responseMessage.data = strcat(responseMessage.data,"Invalid Session ID");
-                        responseMessage.size = sizeof(responseMessage.data);
-                        responseMessage.source = clientID;
+
+                        
+                        sprintf(responseMessage.type,"%d",JN_NAK);
+                        strcpy(responseMessage.data,strcat(temp,","));
+                        strcpy(responseMessage.data,strcat(responseMessage.data,"Invalid Session ID"));
+                        sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                        strcpy(responseMessage.source,clientID);
 
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
