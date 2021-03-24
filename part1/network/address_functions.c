@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
@@ -41,7 +42,10 @@ void init_hints(struct addrinfo * hints){
     hints -> ai_flags = AI_NUMERICHOST; // Accept numbers-and-dots notation only
 }
 
-void deconstruct_packet(struct Message packetStruct, char * receivedPacket){
+/** ----------------------------------------------------
+ * For now, assume we are always sending the right packet
+ * -----------------------------------------------------*/ 
+void deconstruct_packet(struct Message * packetStruct, char * receivedPacket){
     int i;
     int tokenLength;
     char * token;
@@ -49,14 +53,29 @@ void deconstruct_packet(struct Message packetStruct, char * receivedPacket){
         token = strsep(&receivedPacket, ":");
         if (token == NULL) break;
         if (i == 0)
-            strcpy(packetStruct.type, token);
+            strcpy(packetStruct -> type, token);
         else if (i == 1)
-            strcpy(packetStruct.size, token);
+            strcpy(packetStruct -> size, token);
         else if (i == 2)
-            strcpy(packetStruct.source, token);
+            strcpy(packetStruct -> source, token);
         else if (i == 3)
-            strcpy(packetStruct.data, token);
+            strcpy(packetStruct -> data, token);
     } // for
+
+    // Assertions
+    // if (packetStruct -> type[0] == '\0' || packetStruct -> size[0] == '\0' || packetStruct -> source[0] == '\0'){
+    //     clear_server_context(sockfd);
+    //     return -1;
+    // }
+
+    // char digit1 = packetStruct -> type[0];
+    // char digit2 = packetStruct -> type[1];
+    // if (!isdigit(digit1) || !isdigit(digit2)){
+    //     clear_server_context(sockfd);
+    //     return -1;
+    // }
+
+    return;
 } 
 
 void acknowledge(struct Message packetStruct){

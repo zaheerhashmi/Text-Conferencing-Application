@@ -19,7 +19,8 @@
 #include "address_functions.h"
 
 struct IPInfo info;
-enum state clientState;
+enum state * clientState;
+bool forked = false;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // void print_session(){
@@ -91,9 +92,11 @@ int get_command(char * userInput, char ** args, char ** command){
 } // read_inputs
 
 int main(int argc, char *argv[]){
-    clientState = ON_LOCAL;
+    clientState = malloc(sizeof(enum state));
+    *clientState = ON_LOCAL;
     int sockfd = -1;
     bool shortVersion = false;
+    pthread_t tid;
 
     if (argc > 1){
         fprintf(stderr, "Usage: client");
@@ -115,7 +118,6 @@ int main(int argc, char *argv[]){
 
     bool REINPUT = true;
     while (REINPUT){
-        
         printf(___space___(The client is running on %s at %s), info.hostname, info.IP);
         
         if (!shortVersion) print_menu(); else print_short_menu();
@@ -145,31 +147,30 @@ int main(int argc, char *argv[]){
         // We will add an args check if time allots
 
         if(!strcmp("/login", commandOfInterest)){
-            sockfd = login(nargs, args, sockfd, &clientState);
+            sockfd = login(nargs, args, sockfd);
+            // We only fork when we send login request successfully
+            if (sockfd != -1){
+                if(pthread_create(&tid, NULL, &receive_loop, (void *)&sockfd) == -1){
+                    perror(___space___(Uh oh));
+                    exit(0);
+                }
+            }
         } else if (!strcmp("/logout", commandOfInterest)){
-            logout(nargs, args, sockfd, &clientState);
-            if (clientState == ON_LOCAL)
-                shortVersion = false;
+            logout(nargs, args, sockfd);
         } else if (!strcmp("/joinsession", commandOfInterest)){ 
-            join_session(nargs, args, sockfd, &clientState);
-            if (clientState == IN_SESSION)
-                shortVersion = true;
+            join_session(nargs, args, sockfd);
         } else if (!strcmp("/leavesession", commandOfInterest)){
-            leave_session(nargs, args, sockfd, &clientState);
-            if (clientState == ON_LOCAL)
-                shortVersion = false;
+            leave_session(nargs, args, sockfd);
         } else if (!strcmp("/createsession", commandOfInterest)){
-            create_session(nargs, args, sockfd, &clientState);
-            if (clientState == IN_SESSION)
-                shortVersion = true;
+            create_session(nargs, args, sockfd);
         } else if (!strcmp("/list", commandOfInterest)){
-            list(nargs, args, sockfd, &clientState);
+            list(nargs, args, sockfd);
         } else if (!strcmp("/quit", commandOfInterest)){
-            quit(nargs, args, sockfd, &clientState);
+            quit(nargs, args, sockfd);
         } else if (!strcmp("/s", commandOfInterest)){
             shortVersion = !shortVersion;
         } else if (!strcmp("/status", commandOfInterest)){
-            printf(___space___(Client State: %d), clientState);
+            printf(___space___(Client State: %d), *clientState);
             printf("Current Session: %s\n", (current_session[0] == '\0') ? "NULL" : current_session);
             printf("Current my_username: %s\n", (my_username[0] == '\0') ? "NULL" : my_username);
             printf("Socket file descriptor: %d \n\n", sockfd);
@@ -178,10 +179,9 @@ int main(int argc, char *argv[]){
                 printf("Invalid command, please try again\n");
                 continue;
             } else {
-                send_text(text, sockfd, &clientState);
+                send_text(text, sockfd);
             } // else
         } // switch
-        
         
     } // while
     pthread_mutex_destroy(&mutex);

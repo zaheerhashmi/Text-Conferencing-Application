@@ -1,5 +1,5 @@
 CC	= gcc
-CFLAGS = -g -I../include ## -g for debugger, -I for adding path to include. This -I path is only "remembered" by the output executable, 
+CFLAGS = -pthread -g -I../include ## -g for debugger, -I for adding path to include. This -I path is only "remembered" by the output executable, 
 ## and not actually added to the cpp include paths..
 
 CLIENT_OBJFILES = client.o client_functions.o address_functions.o

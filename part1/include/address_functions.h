@@ -46,7 +46,7 @@ void init_hints(struct addrinfo *);
 /** ---------------------------------------------------------------------
  *  General Functions for Packet Construction and Packet Send-and-Receives
  * ----------------------------------------------------------------------*/
-void deconstruct_packet(struct Message packetStruct, char * receivedPacket);
+void deconstruct_packet(struct Message *, char * receivedPacket);
 void acknowledge(struct Message packetStruct);
 // int send_n_receive(sock_t sockfd, char * finalPacket);
 int setup_tcp(char * server_ip, char * server_port);

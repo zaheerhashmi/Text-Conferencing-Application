@@ -22,6 +22,12 @@
 char my_username[INPUT_LENGTH];
 char current_session[INPUT_LENGTH];
 
+void clear_server_context(sock_t sockfd){
+    memset(&my_username[0], 0, sizeof(my_username));
+    memset(&current_session[0], 0, sizeof(current_session));
+    close(sockfd);
+    *clientState = ON_LOCAL;
+}
 void load_login_info(struct Message * packetStruct, char * username, char * password){
     strcpy(packetStruct -> data, "<");
     strcat(packetStruct -> data, username);
@@ -37,6 +43,21 @@ void load_session_id(struct Message * packetStruct, char * id){
     strcat(packetStruct -> data, ">");
 }
 
+int send_data(sock_t sockfd, char * finalPacket){
+    /**
+     * SEND DATA PACKET TO SERVER 
+     */
+    int numbytes;
+
+    // Strlen is fine because we are not sending binary
+    if ((numbytes = send(sockfd, finalPacket, strlen(finalPacket)+1, 0)) < 0){
+        clear_server_context(sockfd);
+        perror(___space___(Client: send));
+        return -1;
+    }    
+    return 0;
+} 
+
 /* -------------------------------
 * NOTE! C++ does a language-type check
 * on pointers if an array is passed
@@ -44,65 +65,64 @@ void load_session_id(struct Message * packetStruct, char * id){
 * that the array is actually fixed and 
 * its length is not determined on runtime.
 * --------------------------------- */
-int send_n_receive(sock_t sockfd, char * finalPacket, char * message, enum state * clientState){
-    /**
-     * SEND DATA PACKET TO SERVER 
-     */
-    pthread_mutex_lock(&mutex);
-    int numbytes;
+// int send_n_receive(sock_t sockfd, char * finalPacket, char * message){
+//     /**
+//      * SEND DATA PACKET TO SERVER 
+//      */
+//     int numbytes;
 
-    fd_set select_fds;
-    double timeoutInterval = 10; // we start out at 10 seconds
-    struct timeval timeout;
+//     fd_set select_fds;
+//     double timeoutInterval = 60; // we start out at 10 seconds
+//     struct timeval timeout;
+//     // Strlen is fine because we are not sending binary
+//     if ((numbytes = send(sockfd, finalPacket, strlen(finalPacket)+1, 0)) < 0){
+//         clear_server_context(sockfd);
+//         perror(___space___(Client: send));
+//         return -1;
+//     }
     
-    // Strlen is fine because we are not sending binary
-    if ((numbytes = send(sockfd, finalPacket, strlen(finalPacket)+1, 0)) < 0){
-        close(sockfd);
-        *clientState = ON_LOCAL;
-        memset(&my_username[0], 0, sizeof(my_username));
-        memset(&current_session[0], 0, sizeof(current_session));
-        perror(___space___(Client: send));
-        return -1;
-    }
-    
-    /* Recv from server. If there is no response in 10s, close socket and quit. */
-    FD_ZERO(&select_fds);
-    FD_SET(sockfd, &select_fds);  
-    timeout.tv_sec = (int) timeoutInterval;
-    timeout.tv_usec = (int) ((timeoutInterval - timeout.tv_sec)*1000000);
-    int selectSignal = select(sockfd + 1, &select_fds, NULL, NULL, &timeout); // Timeout of 10 seconds is setup for login.
-    switch (selectSignal){
-        case -1:
-            perror(___space___(Client: Failed while waiting for server response.));
-            *clientState = ON_LOCAL;
-            memset(&my_username[0], 0, sizeof(my_username));
-            memset(&current_session[0], 0, sizeof(current_session));
-            close(sockfd);
-            return -1;
-        case 0:
-            perror(___space___(Client has not received an ACK from the server in 10 seconds or less. Client timed out! Try Login again.));
-            *clientState = ON_LOCAL;
-            memset(&my_username[0], 0, sizeof(my_username));
-            memset(&current_session[0], 0, sizeof(current_session));
-            close(sockfd); // packet that comes from server will get lost. That's ok.
-            return -1;
-        default:
-            // We need to close on server side too. They will know that this failed.
-            if((numbytes = recv(sockfd, message, MAXBUFLEN, 0)) < 0){
-                perror(___space___(Client: recv));
-                *clientState = ON_LOCAL;
-                memset(&my_username[0], 0, sizeof(my_username));
-                memset(&current_session[0], 0, sizeof(current_session));
-                close(sockfd);
-                return -1;
-            }
+//     /* Recv from server. If there is no response in 10s, close socket and quit. */
+//     FD_ZERO(&select_fds);
+//     FD_SET(sockfd, &select_fds);  
+//     timeout.tv_sec = (int) timeoutInterval;
+//     timeout.tv_usec = (int) ((timeoutInterval - timeout.tv_sec)*1000000);
+// serv
+//     /* We want to make sure that we only wait for socket read on ONE select.
+//     Waiting on two selects may result in the wrong packet being returned.*/
+//     int selectSignal = select(sockfd + 1, &select_fds, NULL, NULL, &timeout); // Timeout of 10 seconds is setup for login.
+//     pthread_mutex_lock(&mutex);
+//     switch (selectSignal){
+//         /**
+//          * These error cases should also make command sockets fail
+//          * at recv.
+//          */
+//         case -1:
+//             perror(___space___(Client: Failed while waiting for server response.));
+//             clear_server_context(sockfd);
+//             pthread_mutex_unlock(&mutex);
+//             return -1;
+//         case 0:
+//             perror(___space___(Client has not received an ACK from the server in 10 seconds or less. Client timed out! Close the connection.));
+//             clear_server_context(sockfd);
+//             pthread_mutex_unlock(&mutex);
+//             return -1;
+//         default:
+//             // We need to close on server side too. They will know that this failed.
+//             // This if block also runs if server has closed connection.
+//             if((numbytes = recv(sockfd, message, MAXBUFLEN, 0)) <= 0){
+//                 perror(___space___(Client: recv));
+//                 clear_server_context(sockfd);
+//                 pthread_mutex_unlock(&mutex);
+//                 return -1;
+//             }
 
-            printf(___space___(This is the server acknowledgement: %s), message);
-            break;
-    } // switch
-    pthread_mutex_unlock(&mutex);
-    return 0;
-} 
+//             // Either error or no error
+//             handle_return_message(message, sockfd, clientState)
+//             pthread_mutex_unlock(&mutex);
+//     } // switch
+    
+//     return 0;
+// } 
 
 
 void construct_packet_client(struct Message packetStruct, packet_t type, char * username, char * finalPacket){
@@ -117,7 +137,7 @@ void construct_packet_client(struct Message packetStruct, packet_t type, char * 
      * Note that we will allow to client to use a different username to get back onto the server
      * once they have logged out.*/
     if (username != NULL){
-        strcat(packetStruct.source, username);
+        strcpy(packetStruct.source, username);
         strcpy(my_username, packetStruct.source); // Once the client has attempted to login, we will assign him or her a username.
     } else {
         /* When we are already on server level. We pass in NULL into username, to indicate that we are already logged in. 
@@ -136,8 +156,78 @@ void construct_packet_client(struct Message packetStruct, packet_t type, char * 
     strcat(finalPacket, packetStruct.data);
 } 
 
+void handle_return_message(char * message, sock_t sockfd){
+    struct Message messageInfo;
+    char session_id[MAXBUFLEN], reason_for_failure[MAXBUFLEN];
+    deconstruct_packet(&messageInfo, message);
+    int i;
+    int type = atoi(messageInfo.type);
+
+    printf("ACKNOWLEDGE:");
+    switch (type){
+        case LO_ACK:
+            printf(___space___(Login is successful from %s), messageInfo.source);
+            *clientState = ON_SERVER;
+            printf(___space___(Client State: %d), *clientState);
+            break;
+        case LO_NAK:
+            printf(___space___(Login unsuccessful from %s because: %s), messageInfo.source,
+            messageInfo.data);
+            clear_server_context(sockfd);
+            memset(&my_username[0], 0, sizeof(my_username));
+            *clientState = ON_LOCAL;
+            break;
+        case JN_ACK:
+            printf(___space___(Welcome to %s good sir %s!), messageInfo.data, messageInfo.source);
+            *clientState = IN_SESSION;
+            strcpy(current_session, messageInfo.data);   
+            break;
+        case JN_NAK:  
+            
+            for (i = 0; i <= 1; i++){
+                char * token = strsep(&message, ",");
+                if (token == NULL) break;
+                if (i == 0){
+                    strcpy(session_id, token);
+                } else if (i == 1){
+                    strcpy(reason_for_failure, token);
+                }
+            }
+            printf(___space___(Join to %s rejected for %s because %s), session_id, messageInfo.source, reason_for_failure);
+            memset(&current_session[0], 0, sizeof(current_session));
+            *clientState = ON_SERVER;
+            break;
+        case NS_ACK:
+            printf(___space___(Room %s successfully created), messageInfo.data);
+            strcpy(current_session, messageInfo.data); 
+             /** Join session will set clientState = IN_SESSION,
+             * Set current_session,
+             * and it will let us join the room once we created it. **/
+            char ** args = (char **)malloc(sizeof(char *));
+            args[0] = NULL;
+            args[1] = (char *)malloc(MAXBUFLEN);
+
+            strcpy(args[1], messageInfo.data);
+
+            // This should only get interrupted if you intentionally
+            // Try to outrace this function 
+            join_session(2, args, sockfd);
+            free(args[1]);
+            args[1] = NULL;
+            free(args);
+            args[1] = NULL;
+            break;
+        case QU_ACK:
+            printf(___space___(Here is a list of users and sessions: %s), messageInfo.data);
+            break;
+        case MESSAGE:
+            printf(___space___(Message received from %s: %s),  messageInfo.source, messageInfo.data);
+            break;
+    } // switch
+}
+
 /* This function most likely has to return the socket that we want to access */
-sock_t login(int nargs, char ** argv, sock_t sock_num, enum state * clientState){
+sock_t login(int nargs, char ** argv, sock_t sock_num){
     /**
      * Args: Client ID, Password, Server-IP, Server-Port
      * Description: Log into the server at the given address and port. The
@@ -157,7 +247,6 @@ sock_t login(int nargs, char ** argv, sock_t sock_num, enum state * clientState)
     struct sockaddr_storage their_addr;
 
     char finalPacket[MAXBUFLEN];
-    char message[MAXBUFLEN];
     /* ^^^ File/packet processing functions ^^^ */
     
 
@@ -173,7 +262,7 @@ sock_t login(int nargs, char ** argv, sock_t sock_num, enum state * clientState)
     load_login_info(&messageInfo, argv[1], argv[2]); // load username and password into packet;
     printf(___space___(Here is the data after it is loaded: %s), messageInfo.data);
     construct_packet_client(messageInfo, LOGIN, argv[1], finalPacket);
-    if(send_n_receive(new_sockfd, finalPacket, message, clientState) == -1){
+    if(send_data(new_sockfd, finalPacket) == -1){
         return -1;
     }
     
@@ -182,7 +271,6 @@ sock_t login(int nargs, char ** argv, sock_t sock_num, enum state * clientState)
      *  so we dont need a function for it.
      */
 
-    *clientState = ON_SERVER;
     return new_sockfd;
 
 
@@ -329,7 +417,7 @@ sock_t login(int nargs, char ** argv, sock_t sock_num, enum state * clientState)
 //     close(sockfd);
 }
 
-void logout(int nargs, char ** args, sock_t sockfd, enum state * clientState){
+void logout(int nargs, char ** args, sock_t sockfd){
     /**
      *  When we logout, we close our connection with the server.
      */
@@ -340,101 +428,97 @@ void logout(int nargs, char ** args, sock_t sockfd, enum state * clientState){
 
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN + MAXBUFLEN/2];
-    char message[MAXBUFLEN + MAXBUFLEN/2];
 
     /**
      * Recognize that this process is a waterfall (step-by-step dependent
      * on the client state)
      */ 
     if (*clientState == ON_LOCAL){
-        printf(___space___(You cannot logout because you are not
-        logged in));
+        printf(___space___(No need to logout because you are not
+        logged in. No need to destroy server variables.));
         return;
     }
 
     if (*clientState == IN_SESSION){
-        leave_session(1, args, sockfd, clientState);
+        leave_session(1, args, sockfd);
         if (*clientState == IN_SESSION){
+            // This shouldn't happen since we set clientState on the client side
+            // And we don't need an ACK
+            clear_server_context(sockfd);
             printf(___space___(Failed to leave room));
             return;
         }
     }
     
     if (*clientState == ON_SERVER){
+        strcpy(messageInfo.data, "");
         construct_packet_client(messageInfo, EXIT, USERNAME_SET, finalPacket);
-        strcpy(finalPacket, "");
-        if(send_n_receive(sockfd, finalPacket, message, clientState) == -1){
+        if(send_data(sockfd, finalPacket) == -1){
+            perror(___space___(Client: send));
+            clear_server_context(sockfd);
             return;
         } 
+        printf(___space___(User %s has logged out.), my_username);
     }
-
     *clientState = ON_LOCAL;
+    clear_server_context(sockfd);
 }
 
-void receive_loop(sock_t sockfd, enum state * clientState){
+void *receive_loop(void * sockfd_pointer){
+    /** ---------------------------------------
+     * Name: Harris Zheng
+     * Date: March 24th, 2021
+     * Description: Receives any packet.
+     * ---------------------------------------- */ 
+    sock_t * sockfd = sockfd_pointer;
     printf(___space___(Entered receive loop!));
     char buff[MAXBUFLEN + MAXBUFLEN/2 + 1];
     char message[MAXBUFLEN + MAXBUFLEN/2 + 1];
     int numbytes = 0;
     fd_set select_fds;
-    double timeoutInterval = 60; // we start out at 10 seconds
+    double timeoutInterval = 3600; // Timeout interval is set to 1 hour for the time being.
     struct timeval timeout;
     /* Recv from server. If there is no response in 10s, close socket and quit. */
     FD_ZERO(&select_fds);
-    FD_SET(sockfd, &select_fds);  
-    timeout.tv_sec = (int) timeoutInterval;
-    timeout.tv_usec = (int) ((timeoutInterval - timeout.tv_sec)*1000000);
-    int count = 0;
-    while (*clientState == IN_SESSION){   
-        int selectSignal = select(sockfd + 1, &select_fds, NULL, NULL, &timeout); // Timeout of 10 seconds is setup for login.
-        pthread_mutex_lock(&mutex);
+    FD_SET(*sockfd, &select_fds);  
+    int count = 0; // The only time we want the receive_loop to run when the client is ON_LOCAL
+    // is when we first initially login.
+
+    /* We may need a global, like clientState, to notify that the child process need be killed. */
+    while (count == 0 || *clientState != ON_LOCAL){
+        struct timeval timeout;
+        timeout.tv_sec = (int) timeoutInterval;
+        timeout.tv_usec = (int) ((timeoutInterval - timeout.tv_sec)*1000000);   
+        int selectSignal = select(*sockfd + 1, &select_fds, NULL, NULL, &timeout); // Timeout of 10 seconds is setup for login.
         switch (selectSignal){
             case -1:
                 perror(___space___(Client: Failed while waiting for server response.));
-                close(sockfd);
                 *clientState = ON_LOCAL;
-                memset(&current_session[0], 0, sizeof(current_session));
-                memset(&my_username[0], 0, sizeof(my_username));
-                pthread_mutex_unlock(&mutex);
-                return;
+                clear_server_context(*sockfd);
             case 0:
-                perror(___space___(Client has not received an ACK from the server in 10 seconds or less. Client timed out! Try Login again.));
-                close(sockfd);
+                /** Just kill on timeout **/
+                perror(___space___(Client: Recv timed out for 60 seconds.)); 
                 *clientState = ON_LOCAL;
-                memset(&current_session[0], 0, sizeof(current_session));
-                memset(&my_username[0], 0, sizeof(my_username));
-                pthread_mutex_unlock(&mutex);
-                return;
+                clear_server_context(*sockfd);
             default:
-                if((numbytes = recv(sockfd, message, MAXBUFLEN, 0)) < 0){
+                /** Error or connection closed. **/
+                if((numbytes = recv(*sockfd, message, MAXBUFLEN, 0)) <= 0){
                     perror(___space___(Client: recv));
-                    close(sockfd);
-                    *clientState = ON_LOCAL;
-                    memset(&current_session[0], 0, sizeof(current_session));
-                    memset(&my_username[0], 0, sizeof(my_username));
-                    pthread_mutex_unlock(&mutex);
-                    return;
+                    *clientState = ON_LOCAL;  
+                    clear_server_context(*sockfd);
+                    return NULL;
                 }
 
-                printf(___space___(This is the server acknowledgement: %s), message);
-                pthread_mutex_unlock(&mutex);
+                handle_return_message(message, *sockfd);
+                count++;
                 break;
         } // switch
-        if (count == 0){
-            printf("We are in the session");
-        }
-        count++;
     }
     printf(___space___(Receive loop exitted!));
-
-    /** --------------------------------------------------------
-     * This function will naturally quit when client is not 
-     * in session.
-     ---------------------------------------------------------*/
-    return;
+    return NULL;
 }
 
-void join_session(int nargs, char ** args, sock_t sockfd, enum state * clientState){
+void join_session(int nargs, char ** args, sock_t sockfd){
     /**
      * Name: Join_session
      * Description: Join an available session on the server. We don't need to keep track of the room
@@ -458,47 +542,37 @@ void join_session(int nargs, char ** args, sock_t sockfd, enum state * clientSta
          * Current Implementation: 
          * You cannot join a session if you are already in a session. 
          * --------------------------------------------------------------------------------- */
-        if (!strcmp(args[1], current_session)){
-            printf(___space___(You are already in this session.));
+        // if (!strcmp(args[1], current_session)){
+            printf(___space___(You are already in a session. You must leave to join another session.));
             return;
-        } else {
-            leave_session(1, args, sockfd, clientState);
-            if (*clientState == IN_SESSION){
-                printf(___space___(Leave room failed.));
-                return;
-            }
-            // leave_session
-        }
+        // } else {
+        //     leave_session(1, args, sockfd);
+        //     if (*clientState == IN_SESSION){
+        //         printf(___space___(Leave room failed.));
+        //         return;
+        //     }
+        //     // leave_session
+        // }
     } // else clientState == ON_SERVER
         
-
+    printf("Joining Session again");
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
-    char message[MAXBUFLEN];
     
     /* load session arg */
     load_session_id(&messageInfo, args[1]);
     
-
     /* Construct the message packet.*/
     construct_packet_client(messageInfo, JOIN, USERNAME_SET, finalPacket);
 
     /* Send join message */
-    if(send_n_receive(sockfd, finalPacket, message, clientState) == -1){
+    if(send_data(sockfd, finalPacket) == -1){
+        perror(___space___(Client: join failed));
         return;
-    }
-
-    /** Process ACK stored in message here **/
-    *clientState = IN_SESSION;
-    strcpy(current_session, args[1]);
-
-    if (fork() == 0){
-        receive_loop(sockfd, clientState); // child_process that ends when client is not in session
-        exit(0);
     }
 }
 
-void leave_session(int nargs, char ** args, sock_t sockfd, enum state * clientState){
+void leave_session(int nargs, char ** args, sock_t sockfd){
     if (nargs != 1){
         printf(___space___(Usage: /leavesession));
         return;
@@ -525,17 +599,16 @@ void leave_session(int nargs, char ** args, sock_t sockfd, enum state * clientSt
      * If client fails sending or receiving, we close it. Server 
      * need close it too. After not getting a response for awhile.
     */
-    if(send_n_receive(sockfd, finalPacket, message, clientState) == -1){
+    if(send_data(sockfd, finalPacket) == -1){
+        printf(___space___(Leave session: failed send));
         return;
     }
-    
 
-    /** Process ACK stored in message here **/
-    *clientState = ON_SERVER;
     memset(&current_session[0], 0, sizeof(current_session));
+    *clientState = ON_SERVER;
 }
 
-void create_session(int nargs, char ** args, sock_t sockfd, enum state * clientState){
+void create_session(int nargs, char ** args, sock_t sockfd){
     if (nargs != 2){
         printf(___space___(Usage: /createsession <session_ID>));
     }
@@ -552,21 +625,15 @@ void create_session(int nargs, char ** args, sock_t sockfd, enum state * clientS
 
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
-    char message[MAXBUFLEN];
 
     load_session_id(&messageInfo, args[1]);
     construct_packet_client(messageInfo, NEW_SESS, USERNAME_SET, finalPacket);
-    if(send_n_receive(sockfd, finalPacket, message, clientState) == -1){
+    if(send_data(sockfd, finalPacket) == -1){
         return;
     }
-
-    /** Join session will set clientState = IN_SESSION,
-     * Set current_session,
-     * and it will let us join the room once we created it. **/
-    join_session(nargs, args, sockfd, clientState);
 }
 
-void list(int nargs, char ** args, sock_t sockfd, enum state * clientState){
+void list(int nargs, char ** args, sock_t sockfd){
     if (nargs != 1){
         printf(___space___(Usage: /list));
         return;
@@ -580,19 +647,16 @@ void list(int nargs, char ** args, sock_t sockfd, enum state * clientState){
 
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
-    char message[MAXBUFLEN];
 
     strcpy(messageInfo.data, "");
 
     construct_packet_client(messageInfo, QUERY, USERNAME_SET, finalPacket);
-    if(send_n_receive(sockfd, finalPacket, message, clientState) == -1){
+    if(send_data(sockfd, finalPacket) == -1){
         return;
     }
-
-    /** Process ACK stored in message here **/
 }
 
-void quit(int nargs, char ** args, sock_t sockfd, enum state * clientState){
+void quit(int nargs, char ** args, sock_t sockfd){
     if (nargs != 1){
         printf(___space___(Usage: /quit));
         return;
@@ -600,7 +664,7 @@ void quit(int nargs, char ** args, sock_t sockfd, enum state * clientState){
 
     /** Leave rooms **/
     if (*clientState == IN_SESSION){
-        leave_session(1, args, sockfd, clientState);
+        leave_session(1, args, sockfd);
         /** ------------------------------------------------------------------
          * If leave session fails, the socket is closed anyways so quit acts
          * without an ACK from the server. 
@@ -613,26 +677,22 @@ void quit(int nargs, char ** args, sock_t sockfd, enum state * clientState){
     /** Log out **/
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
-    char message[MAXBUFLEN];
 
     if (*clientState == ON_SERVER){
         construct_packet_client(messageInfo, EXIT, USERNAME_SET, finalPacket);
-        if(send_n_receive(sockfd, finalPacket, message, clientState) == -1){
+        if(send_data(sockfd, finalPacket) == -1){
             return;
         }  
-
-        /** Process ACK **/
-        close(sockfd);
-        *clientState = ON_LOCAL;
     }
+
+    clear_server_context(sockfd);
 
     /** Exit **/
     exit(0);
 }
 
-void send_text(char * text, sock_t sockfd, enum state * clientState){
-    pthread_mutex_lock(&mutex);
-    int numbytes;
+void send_text(char * text, sock_t sockfd){
+
     if (*clientState == ON_LOCAL){
         printf(___space___(You cannot send anything because 
         you are not logged into the server!));
@@ -645,12 +705,13 @@ void send_text(char * text, sock_t sockfd, enum state * clientState){
         return;
     }
 
-    if ((numbytes = send(sockfd, text, MAXBUFLEN, 0)) < 0){
-        close(sockfd);
-        memset(&current_session[0], 0, sizeof(current_session));
-        memset(&my_username[0], 0, sizeof(my_username));
-        *clientState = ON_LOCAL;
-        perror(___space___(Client: Send));
+    struct Message messageInfo;
+    char finalPacket[MAXBUFLEN];
+    strcpy(messageInfo.data, text); // load data
+    construct_packet_client(messageInfo, MESSAGE, USERNAME_SET, finalPacket);
+
+    // If you send text's entire buffer, you might get multiple requests containing 0s
+    if (send_data(sockfd, finalPacket) < 0){
         return;
     } // if
 }
