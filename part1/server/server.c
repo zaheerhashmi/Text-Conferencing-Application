@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /*
 ** selectserver.c -- a cheezy multiperson chat server
 */
@@ -188,7 +187,7 @@ int main(void)
                         FD_CLR(i, &master); // remove from master set
                     } else {
 						// Got data from client: Process data //
-						message_processing(buf,i,remoteaddr);
+						message_processing(buf,i,remoteaddr,&master);
                     }
                 } // END handle data from client
             } // END got new incoming connection
@@ -200,59 +199,59 @@ int main(void)
 
 
 
-int message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr){
+int message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr,fd_set* master){
 
 	// Loading up message struct // 
-	struct Message packetStruct = malloc(sizeof(Message));
+	struct Message packetStruct;
 	deconstruct_packet(packetStruct,message);
 
 	// Handling Table Functions // 
 
-	if(packetStruct.type == LOGIN){
-		login_handler(packetStruct,clientFD, remoteaddr);
+	if(packetStruct->type == LOGIN){
+		login_handler(packetStruct,clientFD, remoteaddr,master);
 	}
 
-	else if(packetStruct.type == EXIT){
+	else if(packetStruct->type == EXIT){
 		exit_handler();
 	}
 
-	else if (packetStruct.type == JOIN){
+	else if (packetStruct->type == JOIN){
 		join_handler();
 	}
 
-	else if (packerStruct.type == LEAVE_SESS){
+	else if (packetStruct->type == LEAVE_SESS){
 		leavesess_handler();
 	}
 
-	else if (packetStruct.type == NEW_SESS){
+	else if (packetStruct->type == NEW_SESS){
 		newsess_handler();
 	}
 
-	else if (packetStruct.type == MESSAGE){
+	else if (packetStruct->type == MESSAGE){
 		message_handler();
 	}
 
-	else if(packetStruct.type == QUERY){
+	else if(packetStruct->type == QUERY){
 		query_handler();
 	}
 
 }
 
-void login_handler(struct Message packetStruct,int clientFD, struct sockaddr_storage remoteaddr){
-// Parse out the client ID and password from the Messange and Compare with entries in the client register //
-	// If found in the table, check status flag
-	// If status = active send LO_NACK
-	// If status = not active proceed
-	// bind server to client and create an entry for the client and to list // 
-	// Send LO_ACK to the client // 
-// If not matching then send LO_NACK to the client //
+void login_handler(struct Message packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master){
+    // Parse out the client ID and password from the Messange and Compare with entries in the client register //
+        // If found in the table, check status flag
+        // If status = active send LO_NACK
+        // If status = not active proceed
+        // bind server to client and create an entry for the client and to list // 
+        // Send LO_ACK to the client // 
+    // If not matching then send LO_NACK to the client //
 
     int i;
 
     char* clientID;
     char* password;
     char* token;
-    struct message responseMessage = malloc(sizeof(message));
+    struct message responseMessage;
 
     // Obtaining the clientID and password from the message sent by the client //
     for(i = 0; i < 2 ; i++){
@@ -272,120 +271,179 @@ void login_handler(struct Message packetStruct,int clientFD, struct sockaddr_sto
         if(!(strcmp(clientID,registeredClientList[i].clientID) 
         && strcmp(password,registeredClientList[i].password)) ){
             if(registeredClientList[i].activeStatus == 1){
-                printf("Client: %s has alreay logged in \n",registeredClientList[i].clientID);
+                printf("Client: %s has already logged in \n",registeredClientList[i].clientID);
 
                 // Send a NACK to the client //
-                responseMessage.type = "LO_NACK";
-                responseMessage.data = "You have already logged in \n";
+                responseMessage.type = LO_NAK;
+                responseMessage.data = "<You have already logged in>";
                 responseMessage.size = sizeof(responseMessage.data);
-                responseMessage.source = clientID
+                responseMessage.source = clientID;
+
+                char* acknowledgement = strcmp(responseMessage.type,":");
+                acknowledgement = strcat(acknowledgement,responseMessage.size);
+                acknowledgement = strcat(acknowledgement,":");
+                acknowledgement = strcat(acknowledgement,responseMessage.source);
+                acknowledgement = strcat(acknowledgement,":");
+                acknowledgement = strcat(acknowledgement,responseMessage.data);
                  
-                if (send(clientFD, "LO_NACK", sizeof("LO_NACK"), 0) == -1) {
+                if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
                                         perror("send");
+                // Close the socket // 
+                close(clientFD);
+                // Remove the associated clientFD form the set //
+                FD_CLR(clientFD,master);
             }
                 // Client was not active // 
                 else{
-                    registeredClientList[i].activeStatus = 1; // Client now active //
+                        // Bind the server and the client // 
+                        if ((bind(clientFD, (SA*)&remoteaddr, sizeof(servaddr))) != 0) { 
+                        printf("socket bind failed...\n"); 
+                        exit(0); 
+                        } 
+                        registeredClientList[i].activeStatus = 1; // Client now active //
+                        registeredClientList[i].portNumber = clientFD; // Client port //
+                        registeredClientList[i].clientIP =  inet_ntop(remoteaddr.ss_family,
+                                                            get_in_addr((struct sockaddr*)&remoteaddr),
+                                                            remoteIP, INET6_ADDRSTRLEN); 
 
+                        // Send login acknowledgement // 
+                        responseMessage.type = LO_ACK;
+                        responseMessage.data = "<Login Successful>";
+                        responseMessage.size = sizeof(responseMessage.data);
+                        responseMessage.source = clientID;
+
+                        char* acknowledgement = strcmp(responseMessage.type,":");
+                        acknowledgement = strcat(acknowledgement,responseMessage.size);
+                        acknowledgement = strcat(acknowledgement,":");
+                        acknowledgement = strcat(acknowledgement,responseMessage.source);
+                        acknowledgement = strcat(acknowledgement,":");
+                        acknowledgement = strcat(acknowledgement,responseMessage.data);
+                        
+                        if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
+                                                perror("send");
+                    }
+                            
                 }
         }
     }
+    else{
+        // ID and passwords do not exist in the register table // 
+         // Send login acknowledgement // 
+                        responseMessage.type = LO_NAK;
+                        responseMessage.data = "<Invalid Username or Password>";
+                        responseMessage.size = sizeof(responseMessage.data);
+                        responseMessage.source = clientID;
+
+                        char* acknowledgement = strcmp(responseMessage.type,":");
+                        acknowledgement = strcat(acknowledgement,responseMessage.size);
+                        acknowledgement = strcat(acknowledgement,":");
+                        acknowledgement = strcat(acknowledgement,responseMessage.source);
+                        acknowledgement = strcat(acknowledgement,":");
+                        acknowledgement = strcat(acknowledgement,responseMessage.data);
+                        
+                        if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
+                                                perror("send");
+                // Close the socket // 
+                close(clientFD);
+                // Remove the associated clientFD form the set //
+                FD_CLR(clientFD,master);
+            }
+
+    }
 }
-=======
 
 
-#include <stdio.h> 
-#include <netdb.h> 
-#include <netinet/in.h> 
-#include <stdlib.h> 
-#include <string.h> 
-#include <sys/socket.h> 
-#include <sys/types.h> 
-#define MAX 80 
-#define PORT 8080 
-#define SA struct sockaddr 
+// #include <stdio.h> 
+// #include <netdb.h> 
+// #include <netinet/in.h> 
+// #include <stdlib.h> 
+// #include <string.h> 
+// #include <sys/socket.h> 
+// #include <sys/types.h> 
+// #define MAX 80 
+// #define PORT 8080 
+// #define SA struct sockaddr 
   
-// Function designed for chat between client and server. 
-void func(int sockfd) 
-{ 
-    char buff[MAX]; 
-    int n; 
-    // infinite loop for chat 
-    for (;;) { 
-        bzero(buff, MAX); 
+// // Function designed for chat between client and server. 
+// void func(int sockfd) 
+// { 
+//     char buff[MAX]; 
+//     int n; 
+//     // infinite loop for chat 
+//     for (;;) { 
+//         bzero(buff, MAX); 
   
-        // read the message from client and copy it in buffer 
-        read(sockfd, buff, sizeof(buff)); 
-        // print buffer which contains the client contents 
-        printf("From client: %s\t To client : ", buff); 
-        bzero(buff, MAX); 
-        n = 0; 
-        // copy server message in the buffer 
-        while ((buff[n++] = getchar()) != '\n') 
-            ; 
+//         // read the message from client and copy it in buffer 
+//         read(sockfd, buff, sizeof(buff)); 
+//         // print buffer which contains the client contents 
+//         printf("From client: %s\t To client : ", buff); 
+//         bzero(buff, MAX); 
+//         n = 0; 
+//         // copy server message in the buffer 
+//         while ((buff[n++] = getchar()) != '\n') 
+//             ; 
   
-        // and send that buffer to client 
-        write(sockfd, buff, sizeof(buff)); 
+//         // and send that buffer to client 
+//         write(sockfd, buff, sizeof(buff)); 
   
-        // if msg contains "Exit" then server exit and chat ended. 
-        if (strncmp("exit", buff, 4) == 0) { 
-            printf("Server Exit...\n"); 
-            break; 
-        } 
-    } 
-} 
+//         // if msg contains "Exit" then server exit and chat ended. 
+//         if (strncmp("exit", buff, 4) == 0) { 
+//             printf("Server Exit...\n"); 
+//             break; 
+//         } 
+//     } 
+// } 
   
-// Driver function 
-int main() 
-{ 
-    int sockfd, connfd, len; 
-    struct sockaddr_in servaddr, cli; 
+// // Driver function 
+// int main() 
+// { 
+//     int sockfd, connfd, len; 
+//     struct sockaddr_in servaddr, cli; 
   
-    // socket create and verification 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0); 
-    if (sockfd == -1) { 
-        printf("socket creation failed...\n"); 
-        exit(0); 
-    } 
-    else
-        printf("Socket successfully created..\n"); 
-    bzero(&servaddr, sizeof(servaddr)); 
+//     // socket create and verification 
+//     sockfd = socket(AF_INET, SOCK_STREAM, 0); 
+//     if (sockfd == -1) { 
+//         printf("socket creation failed...\n"); 
+//         exit(0); 
+//     } 
+//     else
+//         printf("Socket successfully created..\n"); 
+//     bzero(&servaddr, sizeof(servaddr)); 
   
-    // assign IP, PORT 
-    servaddr.sin_family = AF_INET; 
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY); 
-    servaddr.sin_port = htons(PORT); 
+//     // assign IP, PORT 
+//     servaddr.sin_family = AF_INET; 
+//     servaddr.sin_addr.s_addr = htonl(INADDR_ANY); 
+//     servaddr.sin_port = htons(PORT); 
   
-    // Binding newly created socket to given IP and verification 
-    if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) { 
-        printf("socket bind failed...\n"); 
-        exit(0); 
-    } 
-    else
-        printf("Socket successfully binded..\n"); 
+//     // Binding newly created socket to given IP and verification 
+//     if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) { 
+//         printf("socket bind failed...\n"); 
+//         exit(0); 
+//     } 
+//     else
+//         printf("Socket successfully binded..\n"); 
   
-    // Now server is ready to listen and verification 
-    if ((listen(sockfd, 5)) != 0) { 
-        printf("Listen failed...\n"); 
-        exit(0); 
-    } 
-    else
-        printf("Server listening..\n"); 
-    len = sizeof(cli); 
+//     // Now server is ready to listen and verification 
+//     if ((listen(sockfd, 5)) != 0) { 
+//         printf("Listen failed...\n"); 
+//         exit(0); 
+//     } 
+//     else
+//         printf("Server listening..\n"); 
+//     len = sizeof(cli); 
   
-    // Accept the data packet from client and verification 
-    connfd = accept(sockfd, (SA*)&cli, &len); 
-    if (connfd < 0) { 
-        printf("server acccept failed...\n"); 
-        exit(0); 
-    } 
-    else
-        printf("server acccept the client...\n"); 
+//     // Accept the data packet from client and verification 
+//     connfd = accept(sockfd, (SA*)&cli, &len); 
+//     if (connfd < 0) { 
+//         printf("server acccept failed...\n"); 
+//         exit(0); 
+//     } 
+//     else
+//         printf("server acccept the client...\n"); 
   
-    // Function for chatting between client and server 
-    func(connfd); 
+//     // Function for chatting between client and server 
+//     func(connfd); 
   
-    // After chatting close the socket 
-    close(sockfd); 
-} 
->>>>>>> 98a7cb9a229effabda4cbae09bda01431c7c4950
+//     // After chatting close the socket 
+//     close(sockfd); 
+// } 

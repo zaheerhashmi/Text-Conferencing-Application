@@ -9,12 +9,15 @@ struct registeredClients {
     char* password;
     int activeStatus;
     int sessionID;
+    int portNumber;
+    char* clientIP;
     
 }
 
 // Functions for message processing // 
 int message_processing(char* message, int clientFD);
-void loginHandler(struct Message packetStruct,int clientFD, struct sockaddr_storage remoteaddr);
+void login_handler(struct Message packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master);
+void 
 
 
 #endif
