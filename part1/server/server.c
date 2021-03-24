@@ -201,7 +201,7 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 
 	// Loading up message struct // 
 	struct Message packetStruct;
-	deconstruct_packet(packetStruct,message);
+	deconstruct_packet(&packetStruct,message);
 
 	// Handling Table Functions // 
 
@@ -252,10 +252,11 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
     char* password;
     char* token;
     struct Message responseMessage;
+    char* packetData = packetStruct->data;
 
     // Obtaining the clientID and password from the message sent by the client //
     for(i = 0; i < 2 ; i++){
-        token = strsep(&(packetStruct->data), ",");
+        token = strsep(&(packetData), ",");
         if (token == NULL) break;
         
         if (i == 0)
@@ -278,7 +279,7 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                 sprintf(responseMessage.type,"%d",LO_NAK);
                 strcpy(responseMessage.data,"You have already logged in");
                 sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-                strcpy(responseMessage.source,clientID);
+                strcpy(responseMessage.source,registeredClientList[i].clientID);
 
                 char* acknowledgement = strcat(responseMessage.type,":");
                 acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -297,21 +298,21 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                 // Client was not active // 
                 else{
                         // Bind the server and the client // 
-                        if ((bind(clientFD, &remoteaddr, sizeof(remoteaddr))) != 0) { 
+                        if ((bind(clientFD,(struct sockaddr*)&remoteaddr, sizeof(remoteaddr))) != 0) { 
                         printf("socket bind failed...\n"); 
                         exit(0); 
                         } 
                         registeredClientList[i].activeStatus = 1; // Client now active //
                         registeredClientList[i].portNumber = clientFD; // Client port //
-                        registeredClientList[i].clientIP =  inet_ntop(remoteaddr.ss_family,
+                        registeredClientList[i].clientIP = strdup(inet_ntop(remoteaddr.ss_family,
                                                             get_in_addr((struct sockaddr*)&remoteaddr),
-                                                            remoteIP, INET6_ADDRSTRLEN); 
+                                                            remoteIP, INET6_ADDRSTRLEN)); 
 
                         // Send login acknowledgement // 
                         sprintf(responseMessage.type,"%d",LO_ACK);
                         strcpy(responseMessage.data,"Login Successful");
                         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-                        strcpy(responseMessage.source,clientID);
+                        strcpy(responseMessage.source,registeredClientList[i].clientID);
                        
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -334,7 +335,7 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                         sprintf(responseMessage.type,"%d",LO_NAK);
                         strcpy(responseMessage.data,"Invalid Username or Password");
                         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-                        strcpy(responseMessage.source,clientID);
+                        strcpy(responseMessage.source,registeredClientList[i].clientID);
 
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -352,7 +353,7 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
             }
 
     }
-}
+}}
 
 void exit_handler(int clientFD, fd_set* master){
     int i;
@@ -386,9 +387,9 @@ void newsess_handler(int clientFD, fd_set* master){
         
         // Send Acknowledgement of creation of a new session // 
          sprintf(responseMessage.type,"%d",NS_ACK);
-         sprintf(responseMessage.data,"%d",registeredClientList[temp]); // Session ID
+         sprintf(responseMessage.data,"%d",registeredClientList[temp].sessionID); // Session ID
          sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-         strcpy(responseMessage.source,clientID);
+         strcpy(responseMessage.source,registeredClientList[temp].clientID);
 
           char* acknowledgement = strcat(responseMessage.type,":");
           acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -461,7 +462,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
                 sprintf(responseMessage.type,"%d",JN_ACK);
                 strcpy(responseMessage.data,temp);
                 sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-                strcpy(responseMessage.source,clientID);
+                strcpy(responseMessage.source,registeredClientList[i].clientID);
 
 
                         char* acknowledgement = strcat(responseMessage.type,":");
@@ -483,7 +484,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
                         strcpy(responseMessage.data,strcat(temp,","));
                         strcpy(responseMessage.data,strcat(responseMessage.data,"Invalid Session ID"));
                         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-                        strcpy(responseMessage.source,clientID);
+                        strcpy(responseMessage.source,registeredClientList[i].clientID);
 
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
@@ -524,6 +525,10 @@ for(i = 0; i < 5; i ++ ){
     }
 
   }
+}
+
+void query_handler(){
+    
 }
 
 
