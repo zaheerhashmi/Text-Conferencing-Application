@@ -431,6 +431,10 @@ void leavesess_handler(int clientFD, fd_set* master){
     }
 }
 
+void join_handler(){
+    
+}
+
 
 
 
