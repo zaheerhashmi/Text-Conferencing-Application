@@ -48,7 +48,7 @@ void init_hints(struct addrinfo *);
  * ----------------------------------------------------------------------*/
 void deconstruct_packet(struct Message packetStruct, char * receivedPacket);
 void acknowledge(struct Message packetStruct);
-void send_n_receive(int sockfd, char * finalPacket);
+// int send_n_receive(sock_t sockfd, char * finalPacket);
 int setup_tcp(char * server_ip, char * server_port);
 
 #endif
