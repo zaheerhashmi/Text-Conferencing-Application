@@ -212,7 +212,7 @@ int message_processing(char* message, int clientFD, struct sockaddr_storage remo
 	}
 
 	else if(packetStruct->type == EXIT){
-		exit_handler();
+		exit_handler(clientFD,master);
 	}
 
 	else if (packetStruct->type == JOIN){
@@ -236,6 +236,8 @@ int message_processing(char* message, int clientFD, struct sockaddr_storage remo
 	}
 
 }
+
+/////////////////////////////////////////////////// HELPER FUNCTIONS /////////////////////////////////////////////////
 
 void login_handler(struct Message packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master){
     // Parse out the client ID and password from the Messange and Compare with entries in the client register //
@@ -351,6 +353,24 @@ void login_handler(struct Message packetStruct,int clientFD, struct sockaddr_sto
 
     }
 }
+
+void exit_handler(int clientFD, fd_set* master){
+    int i;
+    // Close the socket and remove it from the master set //
+    close(clientFD);
+    FD_CLR(clientFD,master);
+
+    // Find the the client in register and update // 
+    for(i =0; i<5; i++){
+    if(registeredClientList[i].portNumber == clientFD){
+        registeredClientList[i].activeStatus = 0;
+        registeredClientList[i].portNumber = 0;
+        registeredClientList[i].clientIP = NULL;
+        }
+    }
+}
+
+
 
 
 // #include <stdio.h> 
