@@ -56,7 +56,8 @@ struct registeredClients registeredClientList[5];
 		registeredClientList[4].clientID = prof;
 		registeredClientList[4].password = eceprof;
 
-
+// Room number counter: Represents ID of a room number // 
+int roomNumbers = 0;
 
 struct IPInfo info;
 // get sockaddr, IPv4 or IPv6:
@@ -220,11 +221,11 @@ int message_processing(char* message, int clientFD, struct sockaddr_storage remo
 	}
 
 	else if (packetStruct->type == LEAVE_SESS){
-		leavesess_handler();
+		leavesess_handler(clientFD,&master);
 	}
 
 	else if (packetStruct->type == NEW_SESS){
-		newsess_handler();
+		newsess_handler(clientFD,&master);
 	}
 
 	else if (packetStruct->type == MESSAGE){
@@ -362,11 +363,71 @@ void exit_handler(int clientFD, fd_set* master){
 
     // Find the the client in register and update // 
     for(i =0; i<5; i++){
-    if(registeredClientList[i].portNumber == clientFD){
+    if(registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus = 1){
         registeredClientList[i].activeStatus = 0;
         registeredClientList[i].portNumber = 0;
         registeredClientList[i].clientIP = NULL;
+        return;
         }
+    }
+    return;
+}
+
+
+void newsess_handler(int clientFD, fd_set* master){
+    // Only logged in clients can create a new session and they must'nt be already in a session // 
+    int i = 0;
+    int temp;
+    struct message responseMessage;
+
+    for(i =0; i<5; i++){
+        if(clientFD == registeredClientList[i].portNumber && registeredClientList[i].activeStatus == 1){
+            registeredClientList[i].roomID = roomNumbers++;
+            temp = i;
+        
+        // Send Acknowledgement of creation of a new session // 
+
+        responseMessage.type = NS_ACK;
+        responseMessage.data = registeredClientList[temp]; // Session ID
+        responseMessage.size = sizeof(responseMessage.data);
+        responseMessage.source = clientID;
+
+          char* acknowledgement = strcmp(responseMessage.type,":");
+          acknowledgement = strcat(acknowledgement,responseMessage.size);
+          acknowledgement = strcat(acknowledgement,":");
+          acknowledgement = strcat(acknowledgement,responseMessage.source);
+          acknowledgement = strcat(acknowledgement,":");
+          acknowledgement = strcat(acknowledgement,responseMessage.data);
+                        
+          if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
+              perror("send");
+
+        // Done with this we can return now //
+        return;
+
+        }
+    }
+    // Malicious Client //
+    close(clientFD);
+    FD_CLR(clientFD,master);
+    return;
+    }
+}
+
+void leavesess_handler(int clientFD, fd_set* master){
+    // Check client isnt malicious // 
+     int i= 0;
+     
+     for(i =0; i<5; i++){
+        if(clientFD == registeredClientList[i].portNumber && registeredClientList[i].activeStatus == 1){
+            registeredClientList[i].sessionID = 0; // does not belong to any session now //
+            return;
+        }
+    // Malicious Client // 
+    close(clientFD);
+    FD_CLR(clientFD,master);
+    return;
+
     }
 }
 

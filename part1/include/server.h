@@ -11,13 +11,16 @@ struct registeredClients {
     int sessionID;
     int portNumber;
     char* clientIP;
-    
-}
+    int roomID;
+    }
+
 
 // Functions for message processing // 
 int message_processing(char* message, int clientFD);
 void login_handler(struct Message packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master);
 void exit_handler(int clientFD);
+void newsess_hander(int clientFD,fd_set* master);
+void leavesess_handler(int clientFD, fd_set* master)
 
 
 #endif
