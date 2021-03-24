@@ -2,16 +2,17 @@
 #define _SERVER_H
 #include "rooms.h"
 #include "address_functions.h"
+#include "constants.h"
 
 extern struct IPInfo info;
 
 struct registeredClients {
-    char* clientID;
-    char* password;
+    char clientID[MAXBUFLEN];
+    char password[MAXBUFLEN];
     int activeStatus;
     int sessionID;
     int portNumber;
-    char* clientIP;
+    char clientIP[MAXBUFLEN];
     };
 
 

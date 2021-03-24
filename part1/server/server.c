@@ -48,11 +48,12 @@ void *get_in_addr(struct sockaddr *sa){
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int main(void)
+int main()
 {        // Room id counter //
         roomNumbers = 0;
     	// First client who registered // 
-	strcpy(registeredClientList[0].clientID,"harris");
+
+    strcpy(registeredClientList[0].clientID,"harris");
 	strcpy(registeredClientList[0].password,"ecestudent");
 
 	// Second client who registered //
@@ -185,6 +186,7 @@ int main(void)
                         FD_CLR(i, &master); // remove from master set
                     } else {
 						// Got data from client: Process data //
+                        printf("About to do message handling \n");
 						message_processing(buf,i,remoteaddr,&master,fdmax,listener);
                     }
                 } // END handle data from client
@@ -205,7 +207,7 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 
 	// Handling Table Functions // 
 
-	if(packetStruct.type == "LOGIN"){
+	if(atoi(packetStruct.type) == LOGIN){
 		login_handler(&packetStruct,clientFD,remoteaddr,master);
 	}
 
@@ -304,22 +306,23 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                         } 
                         registeredClientList[i].activeStatus = 1; // Client now active //
                         registeredClientList[i].portNumber = clientFD; // Client port //
-                        registeredClientList[i].clientIP = strdup(inet_ntop(remoteaddr.ss_family,
+                        strcpy(registeredClientList[i].clientIP, strdup(inet_ntop(remoteaddr.ss_family,
                                                             get_in_addr((struct sockaddr*)&remoteaddr),
-                                                            remoteIP, INET6_ADDRSTRLEN)); 
+                                                            remoteIP, INET6_ADDRSTRLEN))); 
 
                         // Send login acknowledgement // 
                         sprintf(responseMessage.type,"%d",LO_ACK);
                         strcpy(responseMessage.data,"Login Successful");
                         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
                         strcpy(responseMessage.source,registeredClientList[i].clientID);
-                       
+
                         char* acknowledgement = strcat(responseMessage.type,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.size);
                         acknowledgement = strcat(acknowledgement,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.source);
                         acknowledgement = strcat(acknowledgement,":");
                         acknowledgement = strcat(acknowledgement,responseMessage.data);
+                        printf("%s \n",acknowledgement);
                         
                         if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
                                                 perror("send");
@@ -366,7 +369,7 @@ void exit_handler(int clientFD, fd_set* master){
     if(registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
         registeredClientList[i].activeStatus = 0;
         registeredClientList[i].portNumber = 0;
-        registeredClientList[i].clientIP = NULL;
+        memset(&registeredClientList[i].clientIP[0], 0, sizeof(registeredClientList[i].clientIP));
         return;
         }
     }
@@ -528,7 +531,7 @@ for(i = 0; i < 5; i ++ ){
 }
 
 void query_handler(){
-    
+
 }
 
 
