@@ -103,7 +103,7 @@ int main(int argc, char *argv[]){
     pthread_t tid;
 
     if (argc > 1){
-        fprintf(stderr, "Usage: client");
+        fprintf(stderr, "Usage: client\n");
         exit(1);
     }
 

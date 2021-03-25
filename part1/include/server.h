@@ -17,6 +17,7 @@ struct registeredClients {
 
 
 // Functions for message processing // 
+int get_active();
 void message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr,fd_set* master, int fdmax, int listener);
 void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master);
 void exit_handler(int clientFD,fd_set* master);
