@@ -619,7 +619,7 @@ void query_handler(int clientFD){
 int i = 0;
 int j = 0;
 char* clientID;
-char* queryBuffer;
+char* queryBuffer = (char *)malloc(MAXBUFLEN);
 struct Message queryResponse;
 
 
