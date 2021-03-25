@@ -141,7 +141,7 @@ while(socketFound == 0){
     else{
         // set socketFound = 1 // 
         socketFound = 1;
-        printf("Bound to port %s instead \n",socketNumber);
+        printf("Bound to port %s \n",socketNumber);
     }
 }
 
@@ -575,7 +575,16 @@ for(i = 0; i < 5; i ++ ){
   }
 }
 
-void query_handler(){
+void query_handler(int clientFD){
+int i = 0;
+int j = 0;
+char* queryBuffer;
+struct Message queryResponse;
+    for(i = 0; i<5; i++){
+        if(registeredClientList[i].activeStatus == 1 && registeredClientList[i].portNumber == clientFD){
+            for(j=0;)
+        }
+    }
 
 }
 
