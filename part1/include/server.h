@@ -25,6 +25,6 @@ void newsess_handler(struct Message * packetStruct, int clientFD,fd_set* master)
 void leavesess_handler(int clientFD, fd_set* master);
 void join_handler(struct Message* packetStruct,int clientFD,fd_set* master);
 void message_handler(struct Message* packetStruct,int clientFD);
-void query_handler();
+void query_handler(int clientFD, fd_set* master);
 
 #endif

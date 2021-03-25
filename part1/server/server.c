@@ -491,21 +491,31 @@ void newsess_handler(struct Message * packetStruct, int clientFD, fd_set* master
             strcpy(registeredClientList[i].sessionID, packetStruct -> data);
             // find 
             char * check_dup_pointer = (char *)malloc(MAXBUFLEN);
-            strcpy(check_dup_pointer, registeredClientList[i].sessionID);
             for (j = 0; j<5; j++){
+                if (j == i || registeredClientList[j].sessionID[0] == '\0') continue;
+                // Take the pointer from our records
+                strcpy(check_dup_pointer, registeredClientList[j].sessionID);
+                
                 /* Without _ (pure match)*/
-                if(!strcmp(registeredClientList[i].sessionID, registeredClientList[j].sessionID) && j != i){
+                printf(___space___(Our Session ID: %s \n Their Session ID %s), registeredClientList[i].sessionID, registeredClientList[j].sessionID);
+                if(!strcmp(registeredClientList[i].sessionID, registeredClientList[j].sessionID)){
                     numSimilar++;
+                    printf(___space___(Pure Match. num Similar +1 to %d), numSimilar);
                     continue;
                 }
+
+
                 char * token = strsep(&check_dup_pointer, "_");
+                printf("This is the token: %s", token);
                 if (token == NULL) continue;
-                
-                /* Match after splitting underscore*/
-                if(!strcmp(token, registeredClientList[j].sessionID) && j != i){
+
+                /* If one our records partially matches their string, we accept */
+                if(!strcmp(token, registeredClientList[i].sessionID)){
                     numSimilar++;
+                    printf(___space___(Partial Match. num Similar +1 to %d), numSimilar);
                 }
             }
+            printf(___space___(Num Similar: %d), numSimilar);
             if (numSimilar != 0){
                 char * tempNumber = (char *)malloc(MAXBUFLEN);
                 strcat(registeredClientList[i].sessionID, "_");

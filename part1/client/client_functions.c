@@ -27,6 +27,7 @@ void clear_server_context(sock_t sockfd){
     memset(&current_session[0], 0, sizeof(current_session));
     close(sockfd);
     *clientState = ON_LOCAL;
+    printf(___space___(Leaving server and current session if applicable...));
 }
 void load_login_info(struct Message * packetStruct, char * username, char * password){
     strcpy(packetStruct -> data, "");
@@ -198,25 +199,13 @@ void handle_return_message(char * message, sock_t sockfd){
         case NS_ACK:
             printf(___space___(Room %s successfully created), messageInfo.data);
             strcpy(current_session, messageInfo.data); 
+            *clientState = IN_SESSION;
              /** Join session will set clientState = IN_SESSION,
              * Set current_session,
              * and it will let us join the room once we created it. **/
-            char ** args = (char **)malloc(sizeof(char *));
-            args[0] = NULL;
-            args[1] = (char *)malloc(MAXBUFLEN);
-
-            strcpy(args[1], messageInfo.data);
-
-            // This should only get interrupted if you intentionally
-            // Try to outrace this function 
-            join_session(2, args, sockfd);
-            free(args[1]);
-            args[1] = NULL;
-            free(args);
-            args = NULL;
             break;
         case QU_ACK:
-            printf(___space___(Here is a list of users and sessions: %s), messageInfo.data);
+            printf(___space___(%s), messageInfo.data);
             break;
         case MESSAGE:
             printf(___space___(Message received from %s: %s),  messageInfo.source, messageInfo.data);
@@ -502,7 +491,7 @@ void *receive_loop(void * sockfd_pointer){
                 /** Error or connection closed. **/
                 if((numbytes = recv(*sockfd, message, MAXBUFLEN, 0)) <= 0){
                     if (numbytes == 0){
-                        printf(___space___(Client: Recv Closed));
+                        printf(___space___(Client: Recv Closed\n));
                     } else {
                         printf(___space___(Client: Recv));
                     }
@@ -535,27 +524,28 @@ void join_session(int nargs, char ** args, sock_t sockfd){
     if (*clientState == ON_LOCAL){
         printf(___space___(You cannot join a session because you are not connected to a server.));
         return;
-    } else if (*clientState == IN_SESSION){
-        /** -------------------------------------------------------------------------------- 
-         * Desired Implementation: 
-         * If current client session == session in args, notify client we're already in this room.
-         * Else, leave the current session, and join a new one. 
-         * 
-         * Current Implementation: 
-         * You cannot join a session if you are already in a session. 
-         * --------------------------------------------------------------------------------- */
-        // if (!strcmp(args[1], current_session)){
-            printf(___space___(You are already in a session. You must leave to join another session.));
-            return;
-        // } else {
-        //     leave_session(1, args, sockfd);
-        //     if (*clientState == IN_SESSION){
-        //         printf(___space___(Leave room failed.));
-        //         return;
-        //     }
-        //     // leave_session
-        // }
-    } // else clientState == ON_SERVER
+    }
+    // } else if (*clientState == IN_SESSION){
+    //     /** -------------------------------------------------------------------------------- 
+    //      * Desired Implementation: 
+    //      * If current client session == session in args, notify client we're already in this room.
+    //      * Else, leave the current session, and join a new one. 
+    //      * 
+    //      * Current Implementation: 
+    //      * You cannot join a session if you are already in a session. 
+    //      * --------------------------------------------------------------------------------- */
+    //     // if (!strcmp(args[1], current_session)){
+    //         printf(___space___(You are already in a session. You must leave to join another session.));
+    //         return;
+    //     // } else {
+    //     //     leave_session(1, args, sockfd);
+    //     //     if (*clientState == IN_SESSION){
+    //     //         printf(___space___(Leave room failed.));
+    //     //         return;
+    //     //     }
+    //     //     // leave_session
+    //     // }
+    // } // else clientState == ON_SERVER
         
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
@@ -631,7 +621,7 @@ void create_session(int nargs, char ** args, sock_t sockfd){
     construct_packet_client(messageInfo, NEW_SESS, USERNAME_SET, finalPacket);
     if(send_data(sockfd, finalPacket) == -1){
         return;
-    }
+    } // Create session never fails.
 }
 
 void list(int nargs, char ** args, sock_t sockfd){
