@@ -618,13 +618,45 @@ void message_handler(struct Message* packetStruct,int clientFD){
 void query_handler(int clientFD){
 int i = 0;
 int j = 0;
+char* clientID;
 char* queryBuffer;
 struct Message queryResponse;
+
+
     for(i = 0; i<5; i++){
         if(registeredClientList[i].activeStatus == 1 && registeredClientList[i].portNumber == clientFD){
-            for(j=0;)
+            clientID = registeredClientList[i].clientID; 
+            for(j=0;j<5;j++){
+                // Prepare the client and session listings //s
+                strcat(queryBuffer,registeredClientList[j].clientID);
+                strcat(queryBuffer,",");
+                strcat(queryBuffer,registeredClientList[i].sessionID);
+                strcat(queryBuffer,",");
+            }
         }
     }
+
+    sprintf(queryResponse.type,"%d",QU_ACK);
+    sprintf(queryResponse.size,"%d",INPUT_LENGTH);
+    strcpy(queryResponse.source,clientID);
+    strcpy(queryResponse.data,queryBuffer);
+
+    // Prepare ack string // 
+    char * acknowledgement = (char *)malloc(MAXBUFLEN);
+    strcpy(acknowledgement, "");
+    strcat(acknowledgement, queryResponse.type);
+    strcat(acknowledgement, ":");
+    strcat(acknowledgement,queryResponse.size);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,queryResponse.source);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,queryResponse.data);
+
+    // Send the query message and acknowledgement // 
+
+     if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+            perror("send");  
+        }
 
 }
 
