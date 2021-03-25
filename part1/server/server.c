@@ -4,6 +4,7 @@
 */
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
@@ -175,7 +176,7 @@ while(socketFound == 0){
 
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
-    
+    printf(___space___(The server is running on %s at %s on Port %s), info.hostname, info.IP, socketNumber);
     // main loop
     for(;;) {
         read_fds = master; // copy it
@@ -290,7 +291,7 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 	}
 
 	else if(atoi(packetStruct.type) == QUERY){
-		query_handler();
+		query_handler(clientFD, master);
 	}
     pthread_mutex_unlock(&mutex);
 
@@ -369,7 +370,7 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                 // Client was not active // 
             } else {
                 //Too many clients //
-                if (get_active() + 1 > 1){
+                if (get_active() + 1 > 5){
                     printf(___space___(Connection refused: Too many connections));
 
                     // Send a NACK to the client //
@@ -564,11 +565,18 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     int j =0;
     char* sessionID = (char *) malloc(MAXBUFLEN); // For some reason, copying sessionID into other strings doesn't work.
     int validSession;
+    bool alreadyInSession = false;
     struct Message responseMessage;
 
 // Ensure that the client is logged in // 
     for(i =0; i<5; i++){
         if(clientFD == registeredClientList[i].portNumber && registeredClientList[i].activeStatus == 1){
+            // Session already exists for the current user
+            if (registeredClientList[i].sessionID[0] != '\0'){
+                validSession = 0;
+                alreadyInSession = true;
+                break;
+            }
             // if logged in check for valid session id
             for(j=0; j<5; j++){
 
@@ -606,9 +614,9 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     else{
         // Send a NACK //                 
         sprintf(responseMessage.type,"%d",JN_NAK);
-        strcpy(responseMessage.data, sessionID);
+        strcpy(responseMessage.data, packetStruct -> data);
         strcat(responseMessage.data, ",");
-        strcat(responseMessage.data, "Invalid Session ID");
+        strcat(responseMessage.data, (alreadyInSession) ? "Already in Session": "Invalid Session ID");
         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
         strcpy(responseMessage.source, packetStruct -> source);
 
@@ -621,7 +629,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
                         
         if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
             perror("send");  
-            exit_handler(clientFD, &master);
+            exit_handler(clientFD, master);
         }
 
         
@@ -673,7 +681,63 @@ void message_handler(struct Message* packetStruct,int clientFD){
     }
 }
 
-void query_handler(){
+void query_handler(int clientFD, fd_set* master){
+    int i = 0, j = 0;
+    char* clientID;
+    char* queryBuffer = (char*)malloc(MAXBUFLEN);
+    char* sessionList = (char*)malloc(MAXBUFLEN);
+    struct Message queryResponse;
+
+    for (i=0;i<5;i++){
+        if (registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            clientID = registeredClientList[i].clientID;
+        }
+    }
+
+    strcpy(queryBuffer, "Here is a table of users and their sessions\n");
+    for(j=0;j<5;j++){
+        
+        // Prepare the client and session listings //s
+        if (registeredClientList[j].activeStatus == 1){
+            strcat(queryBuffer, "\t");
+            strcat(queryBuffer, "User -> ");
+            strcat(queryBuffer,registeredClientList[j].clientID);
+            strcat(queryBuffer," , ");
+            strcat(queryBuffer, "Session -> ");
+            strcat(queryBuffer,registeredClientList[j].sessionID);
+            strcat(queryBuffer," \n");
+            if (registeredClientList[j].sessionID[0] != '\0'){
+                strcat(sessionList, registeredClientList[j].sessionID);
+                strcat(sessionList, ",");
+            }
+        }
+    }
+    strcat(queryBuffer, "\n\n");
+    strcat(queryBuffer, "Here is a list of all user sessions -> ");
+    strcat(queryBuffer, sessionList);
+
+    sprintf(queryResponse.type,"%d",QU_ACK);
+    sprintf(queryResponse.size,"%d",strlen(queryBuffer));
+    strcpy(queryResponse.source,clientID);
+    strcpy(queryResponse.data,queryBuffer);
+
+    // Prepare ack string // 
+    char * acknowledgement = (char *)malloc(MAXBUFLEN);
+    strcpy(acknowledgement, "");
+    strcat(acknowledgement, queryResponse.type);
+    strcat(acknowledgement, ":");
+    strcat(acknowledgement,queryResponse.size);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,queryResponse.source);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,queryResponse.data);
+
+    // Send the query message and acknowledgement // 
+    printf("Ack %s", acknowledgement);
+    if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+        perror("send");  
+        exit_handler(clientFD, master);
+    }
 
 }
 
