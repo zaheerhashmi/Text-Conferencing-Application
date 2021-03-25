@@ -60,7 +60,6 @@ void deconstruct_packet(struct Message * packetStruct, char * receivedPacket){
             strcpy(packetStruct -> source, token);
         else if (i == 3)
             strcpy(packetStruct -> data, token);
-        printf(___space___(%s), token);
     } // for
 
     // Assertions

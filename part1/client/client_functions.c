@@ -37,6 +37,7 @@ void load_login_info(struct Message * packetStruct, char * username, char * pass
 }
 
 void load_session_id(struct Message * packetStruct, char * id){
+    strcpy(packetStruct -> data, "");
     strcat(packetStruct -> data, id);
 }
 
@@ -157,15 +158,15 @@ void handle_return_message(char * message, sock_t sockfd){
     struct Message messageInfo;
     char session_id[MAXBUFLEN], reason_for_failure[MAXBUFLEN];
     deconstruct_packet(&messageInfo, message);
+    char * tempData = malloc(strlen(messageInfo.data) + 1);
     int i;
     int type = atoi(messageInfo.type);
 
-    printf("ACKNOWLEDGE:");
     switch (type){
         case LO_ACK:
             printf(___space___(Login is successful from %s), messageInfo.source);
             *clientState = ON_SERVER;
-            printf(___space___(Client State: %d), *clientState);
+            // printf(___space___(Client State: %d), *clientState);
             break;
         case LO_NAK:
             printf(___space___(Login unsuccessful from %s because: %s), messageInfo.source,
@@ -180,9 +181,9 @@ void handle_return_message(char * message, sock_t sockfd){
             strcpy(current_session, messageInfo.data);   
             break;
         case JN_NAK:  
-            
+            strcpy(tempData, messageInfo.data);
             for (i = 0; i <= 1; i++){
-                char * token = strsep(&message, ",");
+                char * token = strsep(&tempData, ",");
                 if (token == NULL) break;
                 if (i == 0){
                     strcpy(session_id, token);
@@ -468,7 +469,7 @@ void *receive_loop(void * sockfd_pointer){
      * Description: Receives any packet.
      * ---------------------------------------- */ 
     sock_t * sockfd = sockfd_pointer;
-    printf(___space___(Entered receive loop!));
+    // printf(___space___(Entered receive loop!));
     char buff[MAXBUFLEN + MAXBUFLEN/2 + 1];
     char message[MAXBUFLEN + MAXBUFLEN/2 + 1];
     int numbytes = 0;
@@ -552,7 +553,6 @@ void join_session(int nargs, char ** args, sock_t sockfd){
         // }
     } // else clientState == ON_SERVER
         
-    printf("Joining Session again");
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
     
@@ -615,7 +615,7 @@ void create_session(int nargs, char ** args, sock_t sockfd){
         You cannot create a session));
         return;
     } else if (*clientState == IN_SESSION){
-        printf(___space___(You cannot create a session while 
+        printf(___space___(You cannot create and join a session while 
         you are in a session));
         return;
     }

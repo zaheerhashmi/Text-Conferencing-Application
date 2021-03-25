@@ -45,6 +45,8 @@ void print_menu(){
     printf("\n");
     printf("To see a shorter version of the menu, press /s.");
     printf("\n");
+    printf("To hide the menu, press /h");
+    printf("\n");
 }
 
 void print_short_menu(){
@@ -52,6 +54,8 @@ void print_short_menu(){
     printf("/login /logout /joinsession /leavesession /createsession /list /quit <text>\n");
     printf("\n");
     printf("To see a longer version of the menu, press /s.");
+    printf("\n");
+    printf("To hide the menu, press /h");
     printf("\n");
 }
 void pad_space(char * input){
@@ -95,7 +99,7 @@ int main(int argc, char *argv[]){
     clientState = malloc(sizeof(enum state));
     *clientState = ON_LOCAL;
     int sockfd = -1;
-    bool shortVersion = false;
+    bool shortVersion = false, hide = false;
     pthread_t tid;
 
     if (argc > 1){
@@ -103,11 +107,7 @@ int main(int argc, char *argv[]){
         exit(1);
     }
 
-    if (pthread_mutex_init(&mutex, NULL) != 0)
-    {
-        printf("\n mutex init failed\n");
-        exit(1);
-    }
+    
 
     /* Wait for user input*/
     char * text = (char *) malloc(INPUT_LENGTH * sizeof(char));
@@ -118,9 +118,12 @@ int main(int argc, char *argv[]){
 
     bool REINPUT = true;
     while (REINPUT){
-        printf(___space___(The client is running on %s at %s), info.hostname, info.IP);
         
-        if (!shortVersion) print_menu(); else print_short_menu();
+        
+        if (!hide){
+            if (!shortVersion) print_menu(); else print_short_menu();
+            printf(___space___(The client is running on %s at %s), info.hostname, info.IP);
+        }
 
         fgets(userInput, INPUT_LENGTH, stdin);
         if (userInput == NULL){
@@ -174,6 +177,8 @@ int main(int argc, char *argv[]){
             printf("Current Session: %s\n", (current_session[0] == '\0') ? "NULL" : current_session);
             printf("Current my_username: %s\n", (my_username[0] == '\0') ? "NULL" : my_username);
             printf("Socket file descriptor: %d \n\n", sockfd);
+        } else if (!strcmp("/h", commandOfInterest)){
+            hide = !hide;
         } else {
             if (*(userInput) == '/'){
                 printf("Invalid command, please try again\n");
@@ -184,7 +189,6 @@ int main(int argc, char *argv[]){
         } // switch
         
     } // while
-    pthread_mutex_destroy(&mutex);
     return 0;    
 }
 
