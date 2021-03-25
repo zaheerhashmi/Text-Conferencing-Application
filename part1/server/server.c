@@ -497,25 +497,25 @@ void newsess_handler(struct Message * packetStruct, int clientFD, fd_set* master
                 strcpy(check_dup_pointer, registeredClientList[j].sessionID);
                 
                 /* Without _ (pure match)*/
-                printf(___space___(Our Session ID: %s \n Their Session ID %s), registeredClientList[i].sessionID, registeredClientList[j].sessionID);
+                // printf(___space___(Our Session ID: %s \n Their Session ID %s), registeredClientList[i].sessionID, registeredClientList[j].sessionID);
                 if(!strcmp(registeredClientList[i].sessionID, registeredClientList[j].sessionID)){
                     numSimilar++;
-                    printf(___space___(Pure Match. num Similar +1 to %d), numSimilar);
+                    // printf(___space___(Pure Match. num Similar +1 to %d), numSimilar);
                     continue;
                 }
 
 
                 char * token = strsep(&check_dup_pointer, "_");
-                printf("This is the token: %s", token);
+                // printf("This is the token: %s", token);
                 if (token == NULL) continue;
 
                 /* If one our records partially matches their string, we accept */
                 if(!strcmp(token, registeredClientList[i].sessionID)){
                     numSimilar++;
-                    printf(___space___(Partial Match. num Similar +1 to %d), numSimilar);
+                    // printf(___space___(Partial Match. num Similar +1 to %d), numSimilar);
                 }
             }
-            printf(___space___(Num Similar: %d), numSimilar);
+            // printf(___space___(Num Similar: %d), numSimilar);
             if (numSimilar != 0){
                 char * tempNumber = (char *)malloc(MAXBUFLEN);
                 strcat(registeredClientList[i].sessionID, "_");
