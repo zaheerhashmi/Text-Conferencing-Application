@@ -29,18 +29,15 @@ void clear_server_context(sock_t sockfd){
     *clientState = ON_LOCAL;
 }
 void load_login_info(struct Message * packetStruct, char * username, char * password){
-    strcpy(packetStruct -> data, "<");
+    strcpy(packetStruct -> data, "");
     strcat(packetStruct -> data, username);
     strcat(packetStruct -> data, ",");
     strcat(packetStruct -> data, password);
-    strcat(packetStruct -> data, ">");
     // printf(___space___(The packet data after loading: %s), packetStruct.data);
 }
 
 void load_session_id(struct Message * packetStruct, char * id){
-    strcpy(packetStruct -> data, "<");
     strcat(packetStruct -> data, id);
-    strcat(packetStruct -> data, ">");
 }
 
 int send_data(sock_t sockfd, char * finalPacket){

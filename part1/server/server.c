@@ -1,5 +1,6 @@
 /*
-** selectserver.c -- a cheezy multiperson chat server
+* selectserver.c -- a cheezy multiperson chat server
+* Base Code: https://beej.us/guide/bgnet/
 */
 
 #include <stdio.h>
@@ -48,7 +49,7 @@ void *get_in_addr(struct sockaddr *sa){
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int main()
+int main(char argc, char *argv[])
 {        // Room id counter //
         roomNumbers = 0;
     	// First client who registered // 
@@ -81,7 +82,7 @@ int main()
     struct sockaddr_storage remoteaddr; // client address
     socklen_t addrlen;
 
-    char buf[256];    // buffer for client data
+    char buf[MAXBUFLEN];    // buffer for client data
     int nbytes;
 
     int yes=1;        // for setsockopt() SO_REUSEADDR, below
@@ -97,7 +98,7 @@ int main()
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-    if ((rv = getaddrinfo(NULL, PORT, &hints, &ai)) != 0) {
+    if ((rv = getaddrinfo(NULL, argv[1], &hints, &ai)) != 0) {
         fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
         exit(1);
     }
@@ -173,7 +174,7 @@ int main()
                     }
                 } else {
                     // handle data from a client
-                    if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                    if ((nbytes = recv(i, buf, MAXBUFLEN, 0)) <= 0) {
                         // got error or connection closed by client
                         if (nbytes == 0) {
                             // connection closed
@@ -201,6 +202,7 @@ int main()
 
 void message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr,fd_set* master, int fdmax, int listener){
 
+    printf(___space___(This is the message that we are receiving: %s), message);
 	// Loading up message struct // 
 	struct Message packetStruct;
 	deconstruct_packet(&packetStruct,message);
@@ -211,27 +213,27 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 		login_handler(&packetStruct,clientFD,remoteaddr,master);
 	}
 
-	else if(packetStruct.type == "EXIT"){
+	else if(atoi(packetStruct.type) == EXIT){
 		exit_handler(clientFD,master);
 	}
 
-	else if (packetStruct.type == "JOIN"){
+	else if (atoi(packetStruct.type) == JOIN){
 		join_handler(&packetStruct,clientFD,master);
 	}
 
-	else if (packetStruct.type == "LEAVE_SESS"){
+	else if (atoi(packetStruct.type) == LEAVE_SESS){
 		leavesess_handler(clientFD,master);
 	}
 
-	else if (packetStruct.type == "NEW_SESS"){
+	else if (atoi(packetStruct.type) == NEW_SESS){
 		newsess_handler(clientFD,master);
 	}
 
-	else if (packetStruct.type == "MESSAGE"){
+	else if (atoi(packetStruct.type) == MESSAGE){
 		message_handler(&packetStruct,clientFD);
 	}
 
-	else if(packetStruct.type == "QUERY"){
+	else if(atoi(packetStruct.type) == QUERY){
 		query_handler();
 	}
 
@@ -250,8 +252,8 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
 
     int i;
 
-    char* clientID;
-    char* password;
+    char* clientID = (char *) malloc(MAXBUFLEN);
+    char* password = (char *) malloc(MAXBUFLEN);
     char* token;
     struct Message responseMessage;
     char* packetData = packetStruct->data;
@@ -260,103 +262,127 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
     for(i = 0; i < 2 ; i++){
         token = strsep(&(packetData), ",");
         if (token == NULL) break;
-        
         if (i == 0)
             strcpy(clientID, token);
         else if (i == 1)
             strcpy(password, token);
-
     }
 
     // Checking for clientID and password in the register
-
+    /** --------------------------------------
+     * CHANGES LOG:
+     *  - Used MAXBUFLEN in the send() function to send message, not sizeof the message
+     *  sizeof could be calculating everything in bits. Just don't use it lol.
+     *  - Do NOT use the returned string in strcat. Instead, use char* dest
+     *    (first argument) to process it.
+     * 
+     *  - 
+     * If we compared the client username with every client in
+     * the records and we still have not found the client
+     * Then we know the client username is invalid.
+     * ---------------------------------------*/
     for(i= 0; i < 5; i++) {
-        if(!(strcmp(clientID,registeredClientList[i].clientID) 
-        && strcmp(password,registeredClientList[i].password)) ){
+        if(!strcmp(clientID,registeredClientList[i].clientID) && !strcmp(password, registeredClientList[i].password)){
+            // Deal with registered or un-registered cases
             if(registeredClientList[i].activeStatus == 1){
                 printf("Client: %s has already logged in \n",registeredClientList[i].clientID);
 
                 // Send a NACK to the client //
-                
                 sprintf(responseMessage.type,"%d",LO_NAK);
                 strcpy(responseMessage.data,"You have already logged in");
                 sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
                 strcpy(responseMessage.source,registeredClientList[i].clientID);
-
-                char* acknowledgement = strcat(responseMessage.type,":");
-                acknowledgement = strcat(acknowledgement,responseMessage.size);
-                acknowledgement = strcat(acknowledgement,":");
-                acknowledgement = strcat(acknowledgement,responseMessage.source);
-                acknowledgement = strcat(acknowledgement,":");
-                acknowledgement = strcat(acknowledgement,responseMessage.data);
+                
+                char * acknowledgement = (char *)malloc(MAXBUFLEN);
+                strcpy(acknowledgement, "");
+                strcat(acknowledgement, responseMessage.type);
+                strcat(acknowledgement, ":");
+                strcat(acknowledgement,responseMessage.size);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.source);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.data);
                  
-                if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
-                                        perror("send");
-                // Close the socket // 
-                close(clientFD);
-                // Remove the associated clientFD form the set //
-                FD_CLR(clientFD,master);
-            }
-                // Client was not active // 
-                else{
-                        // Bind the server and the client // 
-                        if ((bind(clientFD,(struct sockaddr*)&remoteaddr, sizeof(remoteaddr))) != 0) { 
-                        printf("socket bind failed...\n"); 
-                        exit(0); 
-                        } 
-                        registeredClientList[i].activeStatus = 1; // Client now active //
-                        registeredClientList[i].portNumber = clientFD; // Client port //
-                        strcpy(registeredClientList[i].clientIP, strdup(inet_ntop(remoteaddr.ss_family,
-                                                            get_in_addr((struct sockaddr*)&remoteaddr),
-                                                            remoteIP, INET6_ADDRSTRLEN))); 
+                printf("here is the acknowledgement: %s", acknowledgement);
+                if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                    perror("send");
 
-                        // Send login acknowledgement // 
-                        sprintf(responseMessage.type,"%d",LO_ACK);
-                        strcpy(responseMessage.data,"Login Successful");
-                        sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-                        strcpy(responseMessage.source,registeredClientList[i].clientID);
-
-                        char* acknowledgement = strcat(responseMessage.type,":");
-                        acknowledgement = strcat(acknowledgement,responseMessage.size);
-                        acknowledgement = strcat(acknowledgement,":");
-                        acknowledgement = strcat(acknowledgement,responseMessage.source);
-                        acknowledgement = strcat(acknowledgement,":");
-                        acknowledgement = strcat(acknowledgement,responseMessage.data);
-                        printf("%s \n",acknowledgement);
-                        
-                        if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
-                                                perror("send");
-                    }
-                            
+                    // Close the socket // 
+                    close(clientFD);
+                    // Remove the associated clientFD form the set //
+                    FD_CLR(clientFD,master);
                 }
+
+                return;
+                // Client was not active // 
+            } else {
+                // Bind the server and the client //
+
+                /** -------------------------------
+                 *  We don't need to bind client
+                 ---------------------------------- */
+                // if ((bind(clientFD,(struct sockaddr*)&remoteaddr, sizeof(remoteaddr))) != 0) { 
+                //     printf("socket bind failed...\n"); 
+                //     exit(0); 
+                // } 
+
+                registeredClientList[i].activeStatus = 1; // Client now active //
+                registeredClientList[i].portNumber = clientFD; // Client port //
+                strcpy(registeredClientList[i].clientIP, strdup(inet_ntop(remoteaddr.ss_family,
+                                                    get_in_addr((struct sockaddr*)&remoteaddr),
+                                                    remoteIP, INET6_ADDRSTRLEN))); 
+
+                // Send login acknowledgement // 
+                sprintf(responseMessage.type,"%d",LO_ACK);
+                strcpy(responseMessage.data,"Login Successful");
+                sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+                char * acknowledgement = (char *)malloc(MAXBUFLEN);
+                strcpy(acknowledgement, "");
+                strcat(acknowledgement, responseMessage.type);
+                strcat(acknowledgement, ":");
+                strcat(acknowledgement,responseMessage.size);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.source);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.data);
+                 
+                printf("Here is the acknowledgement: %s", acknowledgement);     
+                if (send(clientFD, acknowledgement, MAXBUFLEN, 0) == -1) {
+                    perror("send");
+                }
+
+                return;
+                            
+            }
         }
     }
-    else{
-        // ID and passwords do not exist in the register table // 
-         // Send login acknowledgement // 
 
-                        sprintf(responseMessage.type,"%d",LO_NAK);
-                        strcpy(responseMessage.data,"Invalid Username or Password");
-                        sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-                        strcpy(responseMessage.source,registeredClientList[i].clientID);
+    sprintf(responseMessage.type,"%d",LO_NAK);
+    strcpy(responseMessage.data,"Invalid Username");
+    sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+    strcpy(responseMessage.source, clientID);
 
-                        char* acknowledgement = strcat(responseMessage.type,":");
-                        acknowledgement = strcat(acknowledgement,responseMessage.size);
-                        acknowledgement = strcat(acknowledgement,":");
-                        acknowledgement = strcat(acknowledgement,responseMessage.source);
-                        acknowledgement = strcat(acknowledgement,":");
-                        acknowledgement = strcat(acknowledgement,responseMessage.data);
-                        
-                        if (send(clientFD,acknowledgement, sizeof(acknowledgement), 0) == -1) {
-                                                perror("send");
-                // Close the socket // 
-                close(clientFD);
-                // Remove the associated clientFD form the set //
-                FD_CLR(clientFD,master);
-            }
+    char * acknowledgement = (char *) malloc(MAXBUFLEN);
+    strcpy(acknowledgement, responseMessage.type);
+    strcat(acknowledgement, ":");
+    strcat(acknowledgement,responseMessage.size);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,responseMessage.source);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,responseMessage.data);
 
+    printf("This is the acknowledgement: %s", acknowledgement);
+    if (send(clientFD, acknowledgement, MAXBUFLEN, 0) == -1) {
+        perror("send");
+        // Close the socket // 
+        close(clientFD);
+        // Remove the associated clientFD form the set //
+        FD_CLR(clientFD,master);
     }
-}}
+
+}
 
 void exit_handler(int clientFD, fd_set* master){
     int i;
