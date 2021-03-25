@@ -98,7 +98,13 @@ int main(char argc, char *argv[])
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-    if ((rv = getaddrinfo(NULL, argv[1], &hints, &ai)) != 0) {
+    // Flag for we found a good socket //
+    int socketFound = 0;
+    char* socketNumber = argv[1];
+    int socketCounter = atoi(argv[1])+(1024 - atoi(argv[1]));
+
+while(socketFound == 0){
+    if ((rv = getaddrinfo(NULL, socketNumber, &hints, &ai)) != 0) {
         fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
         exit(1);
     }
@@ -122,9 +128,22 @@ int main(char argc, char *argv[])
 
     // if we got here, it means we didn't get bound
     if (p == NULL) {
-        fprintf(stderr, "selectserver: failed to bind\n");
-        exit(2);
+        printf("selectserver: failed to bind to port %s \n",socketNumber);
+        // Increase socket Counter // 
+        socketCounter++;
+        // Copy the socketCounter to socketNumber // 
+        sprintf(socketNumber,"%d",socketCounter);
+
+        // exit(2); // Because we couldn't find the port we wanted we will loop through until we find one //
+
     }
+    // P non null -> we are now binded // 
+    else{
+        // set socketFound = 1 // 
+        socketFound = 1;
+        printf("Bound to port %s instead \n",socketNumber);
+    }
+}
 
     freeaddrinfo(ai); // all done with this
 
