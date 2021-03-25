@@ -576,20 +576,27 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     char* sessionID = (char *) malloc(MAXBUFLEN); // For some reason, copying sessionID into other strings doesn't work.
     int validSession;
     bool alreadyInSession = false;
+    bool emptyString = false;
     struct Message responseMessage;
+
 
 // Ensure that the client is logged in // 
     for(i =0; i<5; i++){
         if(clientFD == registeredClientList[i].portNumber && registeredClientList[i].activeStatus == 1){
+            // Check empty sessionID
+            if (strlen(packetStruct -> data) == 0){
+                validSession = 0;
+                emptyString = true;
+                break;
+            }
             // Session already exists for the current user
             if (registeredClientList[i].sessionID[0] != '\0'){
                 validSession = 0;
                 alreadyInSession = true;
                 break;
             }
-            // if logged in check for valid session id
+            // if logged in check that given session id given is valid
             for(j=0; j<5; j++){
-
                 if(!strcmp(registeredClientList[j].sessionID, packetStruct->data)){
                     validSession = 1;
                     break;
@@ -626,7 +633,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
         sprintf(responseMessage.type,"%d",JN_NAK);
         strcpy(responseMessage.data, packetStruct -> data);
         strcat(responseMessage.data, ",");
-        strcat(responseMessage.data, (alreadyInSession) ? "Already in Session": "Invalid Session ID");
+        strcat(responseMessage.data, (alreadyInSession) ? "Already in Session": (emptyString) ? "Session name empty" : "Invalid Session ID");
         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
         strcpy(responseMessage.source, packetStruct -> source);
 
@@ -691,25 +698,6 @@ void message_handler(struct Message* packetStruct,int clientFD){
     }
 }
 
-<<<<<<< HEAD
-void query_handler(int clientFD){
-int i = 0;
-int j = 0;
-char* clientID;
-char* queryBuffer = (char *)malloc(MAXBUFLEN);
-struct Message queryResponse;
-
-
-    for(i = 0; i<5; i++){
-        if(registeredClientList[i].activeStatus == 1 && registeredClientList[i].portNumber == clientFD){
-            clientID = registeredClientList[i].clientID; 
-            for(j=0;j<5;j++){
-                // Prepare the client and session listings //s
-                strcat(queryBuffer,registeredClientList[j].clientID);
-                strcat(queryBuffer,",");
-                strcat(queryBuffer,registeredClientList[i].sessionID);
-                strcat(queryBuffer,",");
-=======
 void query_handler(int clientFD, fd_set* master){
     int i = 0, j = 0;
     char* clientID;
@@ -736,9 +724,14 @@ void query_handler(int clientFD, fd_set* master){
             strcat(queryBuffer,registeredClientList[j].sessionID);
             strcat(queryBuffer," \n");
             if (registeredClientList[j].sessionID[0] != '\0'){
-                strcat(sessionList, registeredClientList[j].sessionID);
-                strcat(sessionList, ",");
->>>>>>> 8c657c3ce5cbfd56280c0a8bbb395e1bdf8df8f4
+                for (i=0;i<5;i++){
+                    // Add to list only if they are different
+                    if (strcmp(registeredClientList[i].clientID, registeredClientList[j].clientID)){
+                        strcat(sessionList, registeredClientList[j].sessionID);
+                        strcat(sessionList, ",");
+                    }
+                }
+                
             }
         }
     }

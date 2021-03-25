@@ -99,7 +99,7 @@ int main(int argc, char *argv[]){
     clientState = malloc(sizeof(enum state));
     *clientState = ON_LOCAL;
     int sockfd = -1;
-    bool shortVersion = false, hide = false;
+    bool shortVersion = false, hide = true;
     pthread_t tid;
 
     if (argc > 1){

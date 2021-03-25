@@ -193,8 +193,6 @@ void handle_return_message(char * message, sock_t sockfd){
                 }
             }
             printf(___space___(Join to %s rejected for %s because %s), session_id, messageInfo.source, reason_for_failure);
-            memset(&current_session[0], 0, sizeof(current_session));
-            *clientState = ON_SERVER;
             break;
         case NS_ACK:
             printf(___space___(Room %s successfully created), messageInfo.data);
@@ -247,7 +245,7 @@ sock_t login(int nargs, char ** argv, sock_t sock_num){
     /* Read necessary parameters and construct the finalPacket */
     struct Message messageInfo;
     load_login_info(&messageInfo, argv[1], argv[2]); // load username and password into packet;
-    printf(___space___(Here is the data after it is loaded: %s), messageInfo.data);
+    // printf(___space___(Here is the data after it is loaded: %s), messageInfo.data);
     construct_packet_client(messageInfo, LOGIN, argv[1], finalPacket);
     if(send_data(new_sockfd, finalPacket) == -1){
         return -1;
@@ -525,6 +523,7 @@ void join_session(int nargs, char ** args, sock_t sockfd){
         printf(___space___(You cannot join a session because you are not connected to a server.));
         return;
     }
+
     // } else if (*clientState == IN_SESSION){
     //     /** -------------------------------------------------------------------------------- 
     //      * Desired Implementation: 
@@ -613,6 +612,7 @@ void create_session(int nargs, char ** args, sock_t sockfd){
         you are in a session));
         return;
     }
+
 
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
