@@ -691,6 +691,25 @@ void message_handler(struct Message* packetStruct,int clientFD){
     }
 }
 
+<<<<<<< HEAD
+void query_handler(int clientFD){
+int i = 0;
+int j = 0;
+char* clientID;
+char* queryBuffer = (char *)malloc(MAXBUFLEN);
+struct Message queryResponse;
+
+
+    for(i = 0; i<5; i++){
+        if(registeredClientList[i].activeStatus == 1 && registeredClientList[i].portNumber == clientFD){
+            clientID = registeredClientList[i].clientID; 
+            for(j=0;j<5;j++){
+                // Prepare the client and session listings //s
+                strcat(queryBuffer,registeredClientList[j].clientID);
+                strcat(queryBuffer,",");
+                strcat(queryBuffer,registeredClientList[i].sessionID);
+                strcat(queryBuffer,",");
+=======
 void query_handler(int clientFD, fd_set* master){
     int i = 0, j = 0;
     char* clientID;
@@ -719,6 +738,7 @@ void query_handler(int clientFD, fd_set* master){
             if (registeredClientList[j].sessionID[0] != '\0'){
                 strcat(sessionList, registeredClientList[j].sessionID);
                 strcat(sessionList, ",");
+>>>>>>> 8c657c3ce5cbfd56280c0a8bbb395e1bdf8df8f4
             }
         }
     }
