@@ -213,7 +213,7 @@ void handle_return_message(char * message, sock_t sockfd){
             free(args[1]);
             args[1] = NULL;
             free(args);
-            args[1] = NULL;
+            args = NULL;
             break;
         case QU_ACK:
             printf(___space___(Here is a list of users and sessions: %s), messageInfo.data);
@@ -501,7 +501,11 @@ void *receive_loop(void * sockfd_pointer){
             default:
                 /** Error or connection closed. **/
                 if((numbytes = recv(*sockfd, message, MAXBUFLEN, 0)) <= 0){
-                    perror(___space___(Client: recv));
+                    if (numbytes == 0){
+                        printf(___space___(Client: Recv Closed));
+                    } else {
+                        printf(___space___(Client: Recv));
+                    }
                     *clientState = ON_LOCAL;  
                     clear_server_context(*sockfd);
                     return NULL;
@@ -512,7 +516,7 @@ void *receive_loop(void * sockfd_pointer){
                 break;
         } // switch
     }
-    printf(___space___(Receive loop exitted!));
+    printf(___space___(Chatroom exitted!));
     return NULL;
 }
 

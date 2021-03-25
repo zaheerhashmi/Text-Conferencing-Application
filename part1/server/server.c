@@ -4,6 +4,7 @@
 */
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
@@ -54,6 +55,11 @@ void *get_in_addr(struct sockaddr *sa){
 
 int main(char argc, char *argv[])
 {        
+
+    if (argc != 2){
+        printf("Usage: server <port number to bind to>\n");
+        exit(1);
+    }
     get_ip(&info);
     // Room id counter //
     roomNumbers = 0;
@@ -92,6 +98,7 @@ int main(char argc, char *argv[])
 
     int yes=1;        // for setsockopt() SO_REUSEADDR, below
     int i, j, rv;
+    int numConnections = 0;
 
     struct addrinfo hints, *ai, *p;
 
@@ -151,15 +158,15 @@ while(socketFound == 0){
     // P non null -> we are now binded // 
     else{
         // set socketFound = 1 // 
+        printf("Bound to port %s\n",socketNumber);
         socketFound = 1;
-        printf("Bound to port %s \n",socketNumber);
     }
 }
 
     freeaddrinfo(ai); // all done with this
 
     // listen
-    if (listen(listener, 10) == -1) {
+    if (listen(listener, 0) == -1) {
         perror("listen");
         exit(3);
     }
@@ -169,10 +176,9 @@ while(socketFound == 0){
 
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
-    
+    printf(___space___(The server is running on %s at %s on Port %s), info.hostname, info.IP, socketNumber);
     // main loop
     for(;;) {
-        printf(___space___(The server is running on %s at %s), info.hostname, info.IP);
         read_fds = master; // copy it
         if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
             perror("select");
@@ -182,13 +188,13 @@ while(socketFound == 0){
         // run through the existing connections looking for data to read
         for(i = 0; i <= fdmax; i++) {
             if (FD_ISSET(i, &read_fds)) { // we got one!!
-                if (i == listener) {
+                if (i == listener) {    
                     // handle new connections
                     addrlen = sizeof remoteaddr;
                     newfd = accept(listener,
                         (struct sockaddr *)&remoteaddr,
                         &addrlen);
-
+                    
                     if (newfd == -1) {
                         perror("accept");
                     } else {
@@ -227,7 +233,9 @@ while(socketFound == 0){
 						// Got data from client: Process data //
                         // printf("About to do message handling \n");
 						message_processing(buf,i,remoteaddr,&master,fdmax,listener);
+                        
                     }
+                    printf(___space___(The server is running on %s at %s on Port %s), info.hostname, info.IP, socketNumber);
                 } // END handle data from client
             } // END got new incoming connection
         } // END looping through file descriptors
@@ -238,6 +246,16 @@ while(socketFound == 0){
 }
 
 
+int get_active(){
+    int i;
+    int counter = 0;
+    for (i = 0; i < 5; i++){
+        if(registeredClientList[i].activeStatus == 1){
+            counter++;
+        } 
+    }
+    return counter;
+}
 
 void message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr,fd_set* master, int fdmax, int listener){
     pthread_mutex_lock(&mutex);
@@ -273,7 +291,7 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 	}
 
 	else if(atoi(packetStruct.type) == QUERY){
-		query_handler();
+		query_handler(clientFD, master);
 	}
     pthread_mutex_unlock(&mutex);
 
@@ -345,18 +363,41 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                  
                 if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
                     perror("send");
-
-                    // Close the socket // 
-                    close(clientFD);
-                    // Remove the associated clientFD form the set //
-                    FD_CLR(clientFD,master);
+                    exit_handler(clientFD, master);
                 }
 
                 return;
                 // Client was not active // 
             } else {
-                // Bind the server and the client //
+                //Too many clients //
+                if (get_active() + 1 > 5){
+                    printf(___space___(Connection refused: Too many connections));
 
+                    // Send a NACK to the client //
+                    sprintf(responseMessage.type,"%d",LO_NAK);
+                    strcpy(responseMessage.data,"Connection refused: Too many connections.");
+                    sprintf(responseMessage.size,"%d",strlen(responseMessage.data));
+                    strcpy(responseMessage.source,registeredClientList[i].clientID);
+                    
+                    char * acknowledgement = (char *)malloc(MAXBUFLEN);
+                    strcpy(acknowledgement, "");
+                    strcat(acknowledgement, responseMessage.type);
+                    strcat(acknowledgement, ":");
+                    strcat(acknowledgement,responseMessage.size);
+                    strcat(acknowledgement,":");
+                    strcat(acknowledgement,responseMessage.source);
+                    strcat(acknowledgement,":");
+                    strcat(acknowledgement,responseMessage.data);
+                    
+                    if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                        perror("send");
+
+                        
+                    }
+
+                    exit_handler(clientFD, master);
+                    return; 
+                }
                 /** -------------------------------
                  *  We don't need to bind client
                  ---------------------------------- */
@@ -387,7 +428,6 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                 strcat(acknowledgement,":");
                 strcat(acknowledgement,responseMessage.data);
                  
-                printf("Here is the acknowledgement: %s", acknowledgement);     
                 if (send(clientFD, acknowledgement, MAXBUFLEN, 0) == -1) {
                     perror("send");
                 }
@@ -399,7 +439,7 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
     }
 
     sprintf(responseMessage.type,"%d",LO_NAK);
-    strcpy(responseMessage.data,"Invalid Username");
+    strcpy(responseMessage.data,"Invalid Username or Password");
     sprintf(responseMessage.size,"%d", strlen(responseMessage.data));
     strcpy(responseMessage.source, clientID);
 
@@ -412,13 +452,10 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
     strcat(acknowledgement,":");
     strcat(acknowledgement,responseMessage.data);
 
-    printf("This is the acknowledgement: %s", acknowledgement);
+    // printf("This is the acknowledgement: %s", acknowledgement);
     if (send(clientFD, acknowledgement, MAXBUFLEN, 0) == -1) {
         perror("send");
-        // Close the socket // 
-        close(clientFD);
-        // Remove the associated clientFD form the set //
-        FD_CLR(clientFD,master);
+        exit_handler(clientFD, master);
     }
 
 }
@@ -445,13 +482,36 @@ void exit_handler(int clientFD, fd_set* master){
 
 void newsess_handler(struct Message * packetStruct, int clientFD, fd_set* master){
     // Only logged in clients can create a new session and they must'nt be already in a session // 
-    int i = 0;
+    int i = 0, j = 0, numSimilar = 0;
     int temp;
     struct Message responseMessage;
 
     for(i =0; i<5; i++){
         if (clientFD == registeredClientList[i].portNumber && registeredClientList[i].activeStatus == 1){
             strcpy(registeredClientList[i].sessionID, packetStruct -> data);
+            // find 
+            char * check_dup_pointer = (char *)malloc(MAXBUFLEN);
+            strcpy(check_dup_pointer, registeredClientList[i].sessionID);
+            for (j = 0; j<5; j++){
+                /* Without _ (pure match)*/
+                if(!strcmp(registeredClientList[i].sessionID, registeredClientList[j].sessionID) && j != i){
+                    numSimilar++;
+                    continue;
+                }
+                char * token = strsep(&check_dup_pointer, "_");
+                if (token == NULL) continue;
+                
+                /* Match after splitting underscore*/
+                if(!strcmp(token, registeredClientList[j].sessionID) && j != i){
+                    numSimilar++;
+                }
+            }
+            if (numSimilar != 0){
+                char * tempNumber = (char *)malloc(MAXBUFLEN);
+                strcat(registeredClientList[i].sessionID, "_");
+                sprintf(tempNumber, "%d", numSimilar);
+                strcat(registeredClientList[i].sessionID, tempNumber);
+            }
             temp = i;
         
             // Send Acknowledgement of creation of a new session // 
@@ -505,11 +565,18 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     int j =0;
     char* sessionID = (char *) malloc(MAXBUFLEN); // For some reason, copying sessionID into other strings doesn't work.
     int validSession;
+    bool alreadyInSession = false;
     struct Message responseMessage;
 
 // Ensure that the client is logged in // 
     for(i =0; i<5; i++){
         if(clientFD == registeredClientList[i].portNumber && registeredClientList[i].activeStatus == 1){
+            // Session already exists for the current user
+            if (registeredClientList[i].sessionID[0] != '\0'){
+                validSession = 0;
+                alreadyInSession = true;
+                break;
+            }
             // if logged in check for valid session id
             for(j=0; j<5; j++){
 
@@ -524,7 +591,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     if(validSession){
         
         // Send an ACK for session joined // 
-        printf(___space___(Copying session ID to %s), registeredClientList[i].clientID);
+        // printf(___space___(Copying session ID to %s), registeredClientList[i].clientID);
         strcpy(registeredClientList[i].sessionID, packetStruct -> data);
         sprintf(responseMessage.type,"%d",JN_ACK);
         strcpy(responseMessage.data, registeredClientList[i].sessionID);
@@ -547,9 +614,9 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     else{
         // Send a NACK //                 
         sprintf(responseMessage.type,"%d",JN_NAK);
-        strcpy(responseMessage.data, sessionID);
+        strcpy(responseMessage.data, packetStruct -> data);
         strcat(responseMessage.data, ",");
-        strcat(responseMessage.data, "Invalid Session ID");
+        strcat(responseMessage.data, (alreadyInSession) ? "Already in Session": "Invalid Session ID");
         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
         strcpy(responseMessage.source, packetStruct -> source);
 
@@ -562,8 +629,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
                         
         if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
             perror("send");  
-            close(clientFD);
-            FD_CLR(clientFD,master);
+            exit_handler(clientFD, master);
         }
 
         
@@ -615,6 +681,7 @@ void message_handler(struct Message* packetStruct,int clientFD){
     }
 }
 
+<<<<<<< HEAD
 void query_handler(int clientFD){
 int i = 0;
 int j = 0;
@@ -632,12 +699,45 @@ struct Message queryResponse;
                 strcat(queryBuffer,",");
                 strcat(queryBuffer,registeredClientList[i].sessionID);
                 strcat(queryBuffer,",");
-            }
+=======
+void query_handler(int clientFD, fd_set* master){
+    int i = 0, j = 0;
+    char* clientID;
+    char* queryBuffer = (char*)malloc(MAXBUFLEN);
+    char* sessionList = (char*)malloc(MAXBUFLEN);
+    struct Message queryResponse;
+
+    for (i=0;i<5;i++){
+        if (registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            clientID = registeredClientList[i].clientID;
         }
     }
 
+    strcpy(queryBuffer, "Here is a table of users and their sessions\n");
+    for(j=0;j<5;j++){
+        
+        // Prepare the client and session listings //s
+        if (registeredClientList[j].activeStatus == 1){
+            strcat(queryBuffer, "\t");
+            strcat(queryBuffer, "User -> ");
+            strcat(queryBuffer,registeredClientList[j].clientID);
+            strcat(queryBuffer," , ");
+            strcat(queryBuffer, "Session -> ");
+            strcat(queryBuffer,registeredClientList[j].sessionID);
+            strcat(queryBuffer," \n");
+            if (registeredClientList[j].sessionID[0] != '\0'){
+                strcat(sessionList, registeredClientList[j].sessionID);
+                strcat(sessionList, ",");
+>>>>>>> 8c657c3ce5cbfd56280c0a8bbb395e1bdf8df8f4
+            }
+        }
+    }
+    strcat(queryBuffer, "\n\n");
+    strcat(queryBuffer, "Here is a list of all user sessions -> ");
+    strcat(queryBuffer, sessionList);
+
     sprintf(queryResponse.type,"%d",QU_ACK);
-    sprintf(queryResponse.size,"%d",INPUT_LENGTH);
+    sprintf(queryResponse.size,"%d",strlen(queryBuffer));
     strcpy(queryResponse.source,clientID);
     strcpy(queryResponse.data,queryBuffer);
 
@@ -653,10 +753,11 @@ struct Message queryResponse;
     strcat(acknowledgement,queryResponse.data);
 
     // Send the query message and acknowledgement // 
-
-     if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
-            perror("send");  
-        }
+    printf("Ack %s", acknowledgement);
+    if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+        perror("send");  
+        exit_handler(clientFD, master);
+    }
 
 }
 
