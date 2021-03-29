@@ -1,6 +1,11 @@
 #include <stdio.h>
 #define INPUT_LENGTH 128
-int main(){
+int main(void){
+    for         
+}
+
+
+void save_text(char * str){
 
     /* Saves server text to a new file.*/
     FILE *file;
@@ -22,5 +27,5 @@ int main(){
     }
 
     // We found a file_name that we are looking for
-    fwrite("Yo what's up", 1, sizeof("Yo what's up"), file);
+    fwrite(str, 1, sizeof(str), file);
 }

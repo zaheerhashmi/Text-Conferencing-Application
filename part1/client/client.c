@@ -85,6 +85,9 @@ int get_command(char * userInput, char ** args, char ** command){
         if (token == NULL) break;
         if (i == 0){
             strcpy(*command, token);
+            if (!strcmp(*command, "/send")){
+                break;
+            }
         } else {
             tokenLength = strlen(token);
             args[i] = (char *) malloc((tokenLength + 1));
@@ -92,12 +95,31 @@ int get_command(char * userInput, char ** args, char ** command){
         } // if 
     } // for
 
+    // Custom argument building for send
+    if (!strcmp(*command, "/send")){
+        for (i = 1 ; true; i++){
+            token = strsep(&userInput, " ");
+            if (token == NULL) return MIN(i, 3); // 3 arguments 
+            if (i == 1){
+                args[1] = (char *) malloc(MAXBUFLEN/2);
+                strcpy(args[1], token);
+            } else if (i == 2){
+                args[2] = (char *) malloc(MAXBUFLEN/2);
+                strcpy(args[2], token);
+            } else {
+                strcat(args[2], " ");
+                strcat(args[2], token);
+            }
+        } // for
+    } // if
+
     return i; // returns the number of arguments
 } // read_inputs
 
 int main(int argc, char *argv[]){
     clientState = malloc(sizeof(enum state));
     *clientState = ON_LOCAL;
+    int i;
     int sockfd = -1;
     bool shortVersion = false, hide = true;
     pthread_t tid;
@@ -118,8 +140,6 @@ int main(int argc, char *argv[]){
 
     bool REINPUT = true;
     while (REINPUT){
-        
-        
         if (!hide){
             if (!shortVersion) print_menu(); else print_short_menu();
             printf(___space___(The client is running on %s at %s), info.hostname, info.IP);
@@ -180,12 +200,20 @@ int main(int argc, char *argv[]){
             hide = !hide;
         } else if (!strcmp("/send", commandOfInterest)){
             send_text(nargs, args, sockfd);
+        } else if (!strcmp("/history", commandOfInterest)){
+            get_history(nargs, args, sockfd);
         } else {
             if (*(userInput) == '/'){
                 printf("Invalid command, please try again\n");
+            } else {
+                printf("\nUse / to enter a command\n");
             }
         }
-        
+
+        /** We will just remove some garbage pointers now**/
+        for (i = 0; i < 30; i++){
+            args[i] = NULL;
+        }
     } // while
     return 0;    
 }

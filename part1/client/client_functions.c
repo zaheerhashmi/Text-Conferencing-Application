@@ -14,20 +14,40 @@
 #include <time.h>
 #include <assert.h>
 #include <pthread.h>
+#include <ctype.h>
 
 #include "client.h"
 #include "constants.h"
 #include "address_functions.h"
+#include "shared.h"
 
 char my_username[INPUT_LENGTH];
 
+void gettime(char * retval){
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    sprintf(retval, "%d-%02d-%02d %02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+}
 
-void comma_delimit(char * message, int num_commas, char ** args){
+int count_commas(char * message){
+    char * temp = malloc(strlen(message) + 1);
+    strcpy(temp, message);
+    int count = 0;
+    while (temp != NULL){
+        if (*temp == ','){
+            count++;
+        }
+        temp++;
+    }
+
+    return count;
+}
+void punc_delimit(char * message, int num_commas, char ** args, const char * character){
     int i;
     
     // For n commas, process n + 1 fields.
     for (i = 0; i < num_commas + 1; i++){
-        char * token = strsep(&message, ",");
+        char * token = strsep(&message, character);
         if (token == NULL) return;
         args[i] = (char *) malloc(INPUT_LENGTH);
         strcpy(args[i], token);
@@ -166,6 +186,30 @@ void construct_packet_client(struct Message packetStruct, packet_t type, char * 
     strcat(finalPacket, packetStruct.data);
 } 
 
+void get_history(int nargs, char ** args, sock_t sockfd){
+    if (nargs != 2){
+        printf(___space___(Usage: /history <session_id>));
+        return;
+    }
+
+    if (*clientState == ON_LOCAL){
+        printf(___space___(Cannot get chat history if you do not have history!));
+        return;
+    }
+
+    if (*clientState == ON_SERVER){
+        printf(___space___(We dont got any history brotha));
+        return;
+    }
+    struct Message packetStruct;
+    char finalPacket[MAXBUFLEN];
+    load_data(&packetStruct, args[1]);
+    construct_packet_client(packetStruct, HISTORY, USERNAME_SET, finalPacket);
+    if (send_data(sockfd, finalPacket) == -1){
+        perror(___space___(Client: send));
+        return;
+    }
+}
 void handle_return_message(char * message, sock_t sockfd){
     struct Message messageInfo;
     deconstruct_packet(&messageInfo, message);
@@ -173,6 +217,7 @@ void handle_return_message(char * message, sock_t sockfd){
     char ** args = (char **)malloc(sizeof(char *));
     int i;
     int type = atoi(messageInfo.type);
+    FILE *file;
 
     switch (type){
         case LO_ACK:
@@ -194,7 +239,7 @@ void handle_return_message(char * message, sock_t sockfd){
             break;
         case JN_NAK:  
             strcpy(tempData, messageInfo.data);
-            comma_delimit(tempData, 1, args);
+            punc_delimit(tempData, 1, args, ",");
             printf(___space___(Join to %s rejected for %s because %s), args[0], messageInfo.source, args[1]);
             break;
         case NS_ACK:
@@ -206,12 +251,12 @@ void handle_return_message(char * message, sock_t sockfd){
              * and it will let us join the room once we created it. **/
             break;
         case NS_NACK:
-            comma_delimit(messageInfo.data, 1, args);
+            punc_delimit(messageInfo.data, 1, args, ",");
             printf(___space___(Room %s not created because %s), args[0], args[1]);
             break;
         case LS_ACK:
             strcpy(tempData, messageInfo.data);
-            comma_delimit(tempData, 1, args);
+            punc_delimit(tempData, 1, args, ",");
             printf(___space___(Left session ID %s -- user still in %s rooms), args[0], args[1]);
             break;
         case LS_NACK:
@@ -221,8 +266,28 @@ void handle_return_message(char * message, sock_t sockfd){
             printf(___space___(%s), messageInfo.data);
             break;
         case MESSAGE:
-            printf(___space___(Message received from %s: %s),  messageInfo.source, messageInfo.data);
+            punc_delimit(messageInfo.data, 1, args, ",");
+            printf(___space___(Message received from %s in Room %s: %s),  messageInfo.source, args[1], args[0]);
             break;
+        case MSG_NACK:
+            printf(___space___(Message not sent because %s does not exist), messageInfo.data);
+            break;
+        case HISTORY_ACK:
+            punc_delimit(messageInfo.data, 1, args, "|");
+            char * localTime = (char *) malloc(INPUT_LENGTH);
+            gettime(localTime);
+            struct Message response;
+            sprintf(response.data, "===================== %s. Room: %s ===========================\n", localTime, args[0]);
+            strcat(response.data, "\n");
+            strcat(response.data, args[1]);
+            printf(___space___(This is the chat history ->));
+            printf(response.data);
+            break;
+        case HISTORY_NACK:
+            punc_delimit(messageInfo.data, 1, args, ":");
+            printf(___space___(Chat history retrieval for Room %s failed because %s), args[0], args[1]);
+            break;
+        
     } // switch
 }
 
@@ -614,6 +679,7 @@ void leave_session(int nargs, char ** args, sock_t sockfd){
 void create_session(int nargs, char ** args, sock_t sockfd){
     if (nargs != 2){
         printf(___space___(Usage: /createsession <session_ID>));
+        return;
     }
 
     if(*clientState == ON_LOCAL){
@@ -678,10 +744,38 @@ void quit(int nargs, char ** args, sock_t sockfd){
     exit(0);
 }
 
-void send_text(int nargs, char ** args, sock_t sockfd){
+int is_session_name_valid(char * message){
+    char * temp = malloc(strlen(message) + 1);
+    strcpy(temp, message);
+    int count = 0;
+    while (temp != NULL){
+        /** NO PUNCTUATIONS ALLOWED IN SESSION NAMES. **/
+        if (ispunct((int) *temp)){
+            return 0;
+        }
+        temp++;
+    }
+    return 1;    
+}
 
-    if (nargs != 3){
-        printf(___space___(Usage: /send <message> <session_id>));
+int are_sessions_valid(char * message){
+    char * temp = malloc(strlen(message) + 1);
+    strcpy(temp, message);
+    int count = 0;
+    while (temp != NULL && strlen(temp) != 0){
+        /** If we find a punctuation and it's not a comma, the session names are invalid. **/
+        if (ispunct((int) *temp) && *temp != ','){
+            return 0;
+        }
+        temp++;
+    }
+    return 1;
+}
+void send_text(int nargs, char ** args, sock_t sockfd){
+    int i;
+    char * message = (char *)malloc(MAXBUFLEN);
+    if (nargs < 3){
+        printf("\nUsage: /send <session_id_1,session_id_2,session_id_3, ...> <message>\n");
         return;
     }
 
@@ -697,12 +791,28 @@ void send_text(int nargs, char ** args, sock_t sockfd){
         return;
     }
 
+    if (!are_sessions_valid(args[1])){
+        printf("\nYou can only use commas in the sessions list input! \n Usage: /send <session_id_1,session_id_2,session_id_3, ...> <message>\n");
+        return;
+    }
+
+    // strcpy(message, "");
+    for (i = 2; args[i] != NULL; i++){
+        strcat(message, args[i]);
+        strcat(message, " ");
+    }
+
+    // if (strlen(message) == 0){
+    //     printf(___space___(You must send information))
+    // }
+
+    
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
 
     strcpy(messageInfo.data, args[1]); // load data
-    strcat(messageInfo.data, ",");
-    strcat(messageInfo.data, args[2]);
+    strcat(messageInfo.data, ";");
+    strcat(messageInfo.data, message);
     construct_packet_client(messageInfo, MESSAGE, USERNAME_SET, finalPacket);
 
     // If you send text's entire buffer, you might get multiple requests containing 0s

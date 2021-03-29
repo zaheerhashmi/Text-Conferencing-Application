@@ -6,7 +6,7 @@
 #define STR(x) #x
 #define USERNAME_SET NULL
 #define ___space___(x) ("\n"#x"\n")
-
+#define MIN(x,y) (((x) <= (y)) ? (x) : (y))
 typedef int sock_t;
 typedef int packet_t;
 typedef int error_t;

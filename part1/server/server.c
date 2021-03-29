@@ -27,9 +27,11 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "constants.h"
 #include "server.h"
+#include "shared.h"
 #include "address_functions.h"
 
 #define PORT "3490"  // the port users will be connecting to
@@ -44,6 +46,34 @@ struct IPInfo info;
 // Room number counter: Represents ID of a room number // 
 int roomNumbers;
 // get sockaddr, IPv4 or IPv6:
+
+void gettime(char * retval){
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    sprintf(retval, "%d-%02d-%02d %02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+}
+void read_from_file(FILE *f, char ** retval){
+    int length;
+    fseek (f, 0, SEEK_END);
+    length = ftell (f);
+    fseek (f, 0, SEEK_SET);
+    fread (*retval, 1, length, f);
+}
+void write_to_file(struct Message * responseMessage, char * sessionID){
+    char filename[INPUT_LENGTH];
+    char data[MAXBUFLEN/2];
+    strcpy(filename, sessionID);
+    strcat(filename, ".txt");
+    FILE * file;
+    file = fopen(filename, "a");
+    strcpy(data, "");
+    strcat(data, responseMessage->source);
+    strcat(data, "-> ");
+    strcat(data, responseMessage->data);
+    strcat(data, "\n");
+    fwrite(data, 1, strlen(data), file);
+    fclose(file);
+}
 
 void *get_in_addr(struct sockaddr *sa){
     if (sa->sa_family == AF_INET) {
@@ -308,18 +338,92 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 	}
 
 	else if (atoi(packetStruct.type) == MESSAGE){
-		message_handler(&packetStruct,clientFD);
+		message_handler(&packetStruct,clientFD,master);
 	}
 
 	else if(atoi(packetStruct.type) == QUERY){
 		query_handler(clientFD, master);
-	}
+	} else if(atoi(packetStruct.type) == HISTORY){
+        history_handler((packetStruct.data), clientFD, master);
+    }
     pthread_mutex_unlock(&mutex);
 
 }
 
 /////////////////////////////////////////////////// HELPER FUNCTIONS /////////////////////////////////////////////////
 
+void history_handler(char * sessionID, int clientFD, fd_set* master){
+    int i;
+    for (i=0;i<5;i++){
+        if (registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            break;
+        }
+    }
+    FILE *file;
+    char filename[INPUT_LENGTH], chatroom_info[INPUT_LENGTH];
+    strcpy(filename, sessionID);
+    strcat(filename, ".txt");
+    file = fopen(filename, "r");
+    if (file == NULL){
+        struct Message responseMessage;
+        // Send Acknowledgement of creation of a new session // 
+        sprintf(responseMessage.type,"%d",HISTORY_NACK);
+        strcpy(responseMessage.data, sessionID); // Session ID
+        strcat(responseMessage.data, ",");
+        strcpy(responseMessage.data, "Invalid Session ID");
+        sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+        strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+        char* acknowledgement = strcat(responseMessage.type,":");
+        strcat(acknowledgement,responseMessage.size);
+        strcat(acknowledgement,":");
+        strcat(acknowledgement,responseMessage.source);
+        strcat(acknowledgement,":");
+        strcat(acknowledgement,responseMessage.data);
+                    
+        if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+            perror("send");
+            // Done with this we can return now //
+            return;
+        }
+        return;
+
+        // file does not exist!
+    }
+    // file exists!
+    char * fileContents = (char *)malloc(MAXBUFLEN);
+    strcpy(chatroom_info, "");
+    strcat(chatroom_info, sessionID);
+    strcat(chatroom_info, "|"); // we should use semicolon delimiters here
+    read_from_file(file, &fileContents);
+    strcat(chatroom_info, fileContents);
+    // free(localTime);
+    // free(fileContents);
+    
+    struct Message responseMessage;
+    // Send Acknowledgement of creation of a new session // 
+    sprintf(responseMessage.type,"%d",HISTORY_ACK);
+    strcpy(responseMessage.data, chatroom_info); // Session ID
+    sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+    strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+    char* acknowledgement = strcat(responseMessage.type,":");
+    strcat(acknowledgement,responseMessage.size);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,responseMessage.source);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,responseMessage.data);
+    
+    printf("%s", acknowledgement);
+    if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+        perror("send");
+        fclose(file);
+        // Done with this we can return now //
+        return;
+    }
+    fclose(file);
+    return;
+}
 void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master){
     // Parse out the client ID and password from the Messange and Compare with entries in the client register //
         // If found in the table, check status flag
@@ -507,6 +611,7 @@ void newsess_handler(struct Message * packetStruct, int clientFD, fd_set* master
     int i = 0, j = 0, numSimilar = 0;
     int temp;
     struct Message responseMessage;
+    FILE * file;
 
     for(i =0; i<5; i++){
         /** ------------------------------------
@@ -569,6 +674,11 @@ void newsess_handler(struct Message * packetStruct, int clientFD, fd_set* master
 
             // Add the sessionID to the user
             add_session_id(packetStruct, i);
+            char filename[INPUT_LENGTH];
+            strcpy(filename, packetStruct -> data);
+            strcat(filename, ".txt");
+            file = fopen(filename, "w"); // clears older files
+            fclose(file);
             return;
         }
     }
@@ -626,7 +736,7 @@ void leavesess_handler(struct Message * packetStruct, int clientFD, fd_set* mast
                 strcat(acknowledgement,responseMessage.data);
                 if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
                     perror("send");
-                }
+                }            
             }
             return;
             
@@ -652,6 +762,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     char* sessionID = (char *) malloc(MAXBUFLEN); // For some reason, copying sessionID into other strings doesn't work.
     int validSession;
     bool emptyString = false;
+    bool alreadyInSession = false;
     struct Message responseMessage;
 
 
@@ -665,6 +776,11 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
                 break;
             }
 
+            if(look_for_sessionID(packetStruct -> data, i)){
+                validSession = 0;
+                alreadyInSession = true;
+                break;
+            }
         
 
             // if logged in check that given session id given is valid
@@ -674,6 +790,8 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
                     break;
                 }
             }
+
+            // we need an already in session check
             break; // forgot this break
         }
     } 
@@ -696,6 +814,8 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
         
         if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
             perror("send");
+            free(sessionID);
+            return;
         }
 
         add_session_id(packetStruct, i);
@@ -706,7 +826,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
         sprintf(responseMessage.type,"%d",JN_NAK);
         strcpy(responseMessage.data, packetStruct -> data);
         strcat(responseMessage.data, ",");
-        strcat(responseMessage.data, (emptyString) ? "Session name empty" : "Invalid Session ID");
+        strcat(responseMessage.data, (emptyString) ? "Session name empty" : (alreadyInSession) ? "Already in that session" : "Invalid Session ID");
         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
         strcpy(responseMessage.source, packetStruct -> source);
 
@@ -718,8 +838,10 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
         strcat(acknowledgement,responseMessage.data);
                         
         if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
-            perror("send");  
+            perror("send"); 
+            free(sessionID); 
             exit_handler(clientFD, master);
+            return;
         }
 
         
@@ -727,33 +849,67 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
 }
 
 
-void message_handler(struct Message* packetStruct,int clientFD){
+void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
     // Storing the message // 
-    int i;
+    int i, j;
     char * buf;
-    char * sessionID;
+    char * sessionID_string;
+    struct Message responseMessage;
     /** Deconstruct the data field **/
-    char * temp = (char *) malloc(strlen(packetStruct -> data) + 1);
+    char * temp = (char *) malloc(MAXBUFLEN/2);
     strcpy(temp, packetStruct -> data);
     for (i = 0; i < 2; i++){    
-        char * token = strsep(&temp, ",");
+        char * token = strsep(&temp, ";");
         if (token == NULL) break;
         if (i == 0){
-            sessionID = (char *)malloc(MAXBUFLEN/2);
-            strcpy(sessionID, token);
+            sessionID_string = (char *)malloc(MAXBUFLEN/2);
+            strcpy(sessionID_string, token);
         } else if (i == 1){
             buf = (char *)malloc(MAXBUFLEN/2);
             strcpy(buf, token);
         }
     }
 
+    // temp loses reference here????
+
+    temp = (char *) malloc(MAXBUFLEN/2);
+    strcpy(temp, sessionID_string);
     for (i = 0; i < 5; i++){
         if (registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            /** Read every session ID **/
+            for (j = 0; true; j++){
+                char * sessionID = strsep(&temp, ",");
+                if (sessionID == NULL) break;
+                if (!look_for_sessionID(sessionID, i)){
+                    // We are sending messages to a room that our user does not belong too! NACK!
+                    sprintf(responseMessage.type,"%d", MSG_NACK);
+                    strcpy(responseMessage.data, sessionID);
+                    sprintf(responseMessage.size,"%d", strlen(responseMessage.data));
+                    strcpy(responseMessage.source, packetStruct -> source);
+
+                    char* acknowledgement = strcat(responseMessage.type,":");
+                    strcat(acknowledgement,responseMessage.size);
+                    strcat(acknowledgement,":");
+                    strcat(acknowledgement,responseMessage.source);
+                    strcat(acknowledgement,":");
+                    strcat(acknowledgement,responseMessage.data);
+                                    
+                    if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                        perror("send");  
+                        exit_handler(clientFD, master);
+                    }
+                    return;
+                }
+            } // for j
             break;
-        }
+        } // for i
     }
 
-    
+    /** ------------------------------
+     *  When we reached here,
+     *  we have already confirmed
+     *  that room is valid.
+     * ------------------------------ **/
     struct Message response;
     char * ack = (char *) malloc(MAXBUFLEN);
     
@@ -769,6 +925,13 @@ void message_handler(struct Message* packetStruct,int clientFD){
     strcat(ack, ":");
     strcat(ack, response.data);
 
+    /** Write to all session IDS **/
+    struct clientSessionID * curr = registeredClientList[i].sessionList;
+    while (curr != NULL){
+        write_to_file(&response, curr -> sessionID);
+        curr = curr -> next;
+    }
+    
 
     /* Debug Notes: Make sure sessionID is right, and make sure the port numbers are right*/
     for(i = 0; i < 5; i ++ ){
@@ -777,14 +940,26 @@ void message_handler(struct Message* packetStruct,int clientFD){
          * It's ok to message yourself, you are important too XD
          * registeredClientList[i].portNumber != clientFD
          * 
-         * We are now going to loop through 
+         * We are now going to find every receiver of interest sent by client and find it on other clients 
          * **/
-        if(look_for_sessionID(sessionID, i)){
-            if (send(registeredClientList[i].portNumber, ack, MAXBUFLEN, 0) == -1) {
-                perror("send");
-            }
-        }
+        temp = (char *) malloc(MAXBUFLEN/2);
+        strcpy(temp, sessionID_string);
+        for (j = 0; true; j++){
+            char * sessionID = strsep(&temp, ",");
+            if (sessionID == NULL) break;
+            
+            if(look_for_sessionID(sessionID, i)){
+                char ack_with_session[MAXBUFLEN];
+                strcpy(ack_with_session, ack);
+                strcat(ack_with_session, ",");
+                strcat(ack_with_session, sessionID);
+                if (send(registeredClientList[i].portNumber, ack_with_session, MAXBUFLEN, 0) == -1) {
+                    perror("send");
+                }
 
+            }
+            free(sessionID);
+        }
     }
 }
 

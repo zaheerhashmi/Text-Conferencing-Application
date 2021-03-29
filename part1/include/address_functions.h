@@ -36,8 +36,12 @@ enum packet_type{
     NS_ACK,
     NS_NACK,
     MESSAGE,
+    MSG_NACK,
     QUERY,
-    QU_ACK
+    QU_ACK,
+    HISTORY,
+    HISTORY_ACK,
+    HISTORY_NACK,
 };
 
 /** -------------------------------------------
