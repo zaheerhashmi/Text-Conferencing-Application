@@ -30,8 +30,11 @@ enum packet_type{
     JN_ACK,
     JN_NAK,
     LEAVE_SESS,
+    LS_ACK,
+    LS_NACK,
     NEW_SESS,
     NS_ACK,
+    NS_NACK,
     MESSAGE,
     QUERY,
     QU_ACK

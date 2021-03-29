@@ -20,11 +20,22 @@
 #include "address_functions.h"
 
 char my_username[INPUT_LENGTH];
-char current_session[INPUT_LENGTH];
 
+
+void comma_delimit(char * message, int num_commas, char ** args){
+    int i;
+    
+    // For n commas, process n + 1 fields.
+    for (i = 0; i < num_commas + 1; i++){
+        char * token = strsep(&message, ",");
+        if (token == NULL) return;
+        args[i] = (char *) malloc(INPUT_LENGTH);
+        strcpy(args[i], token);
+    } // for
+}
 void clear_server_context(sock_t sockfd){
     memset(&my_username[0], 0, sizeof(my_username));
-    memset(&current_session[0], 0, sizeof(current_session));
+
     close(sockfd);
     *clientState = ON_LOCAL;
     printf(___space___(Leaving server and current session if applicable...));
@@ -37,7 +48,7 @@ void load_login_info(struct Message * packetStruct, char * username, char * pass
     // printf(___space___(The packet data after loading: %s), packetStruct.data);
 }
 
-void load_session_id(struct Message * packetStruct, char * id){
+void load_data(struct Message * packetStruct, char * id){
     strcpy(packetStruct -> data, "");
     strcat(packetStruct -> data, id);
 }
@@ -157,9 +168,9 @@ void construct_packet_client(struct Message packetStruct, packet_t type, char * 
 
 void handle_return_message(char * message, sock_t sockfd){
     struct Message messageInfo;
-    char session_id[MAXBUFLEN], reason_for_failure[MAXBUFLEN];
     deconstruct_packet(&messageInfo, message);
     char * tempData = malloc(strlen(messageInfo.data) + 1);
+    char ** args = (char **)malloc(sizeof(char *));
     int i;
     int type = atoi(messageInfo.type);
 
@@ -179,28 +190,32 @@ void handle_return_message(char * message, sock_t sockfd){
         case JN_ACK:
             printf(___space___(Welcome to %s good sir %s!), messageInfo.data, messageInfo.source);
             *clientState = IN_SESSION;
-            strcpy(current_session, messageInfo.data);   
+
             break;
         case JN_NAK:  
             strcpy(tempData, messageInfo.data);
-            for (i = 0; i <= 1; i++){
-                char * token = strsep(&tempData, ",");
-                if (token == NULL) break;
-                if (i == 0){
-                    strcpy(session_id, token);
-                } else if (i == 1){
-                    strcpy(reason_for_failure, token);
-                }
-            }
-            printf(___space___(Join to %s rejected for %s because %s), session_id, messageInfo.source, reason_for_failure);
+            comma_delimit(tempData, 1, args);
+            printf(___space___(Join to %s rejected for %s because %s), args[0], messageInfo.source, args[1]);
             break;
         case NS_ACK:
             printf(___space___(Room %s successfully created), messageInfo.data);
-            strcpy(current_session, messageInfo.data); 
+
             *clientState = IN_SESSION;
              /** Join session will set clientState = IN_SESSION,
              * Set current_session,
              * and it will let us join the room once we created it. **/
+            break;
+        case NS_NACK:
+            comma_delimit(messageInfo.data, 1, args);
+            printf(___space___(Room %s not created because %s), args[0], args[1]);
+            break;
+        case LS_ACK:
+            strcpy(tempData, messageInfo.data);
+            comma_delimit(tempData, 1, args);
+            printf(___space___(Left session ID %s -- user still in %s rooms), args[0], args[1]);
+            break;
+        case LS_NACK:
+            printf(___space___(Unable to leave session %s because session does not exist), messageInfo.data);
             break;
         case QU_ACK:
             printf(___space___(%s), messageInfo.data);
@@ -425,7 +440,7 @@ void logout(int nargs, char ** args, sock_t sockfd){
     }
 
     if (*clientState == IN_SESSION){
-        leave_session(1, args, sockfd);
+        leave_session(2, args, sockfd);
         if (*clientState == IN_SESSION){
             // This shouldn't happen since we set clientState on the client side
             // And we don't need an ACK
@@ -550,7 +565,7 @@ void join_session(int nargs, char ** args, sock_t sockfd){
     char finalPacket[MAXBUFLEN];
     
     /* load session arg */
-    load_session_id(&messageInfo, args[1]);
+    load_data(&messageInfo, args[1]);
     
     /* Construct the message packet.*/
     construct_packet_client(messageInfo, JOIN, USERNAME_SET, finalPacket);
@@ -563,8 +578,8 @@ void join_session(int nargs, char ** args, sock_t sockfd){
 }
 
 void leave_session(int nargs, char ** args, sock_t sockfd){
-    if (nargs != 1){
-        printf(___space___(Usage: /leavesession));
+    if (nargs != 2){
+        printf(___space___(Usage: /leavesession <session_id));
         return;
     }
 
@@ -581,8 +596,7 @@ void leave_session(int nargs, char ** args, sock_t sockfd){
     char finalPacket[MAXBUFLEN];
     char message[MAXBUFLEN];
 
-    strcpy(messageInfo.data, "");
-
+    load_data(&messageInfo, args[1]);
     construct_packet_client(messageInfo, LEAVE_SESS, USERNAME_SET, finalPacket);
 
     /**  ---------------------------------------------------------------
@@ -594,8 +608,7 @@ void leave_session(int nargs, char ** args, sock_t sockfd){
         return;
     }
 
-    memset(&current_session[0], 0, sizeof(current_session));
-    *clientState = ON_SERVER;
+
 }
 
 void create_session(int nargs, char ** args, sock_t sockfd){
@@ -607,17 +620,12 @@ void create_session(int nargs, char ** args, sock_t sockfd){
        printf(___space___(You are not connected to the server. 
         You cannot create a session));
         return;
-    } else if (*clientState == IN_SESSION){
-        printf(___space___(You cannot create and join a session while 
-        you are in a session));
-        return;
-    }
-
+    } 
 
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
 
-    load_session_id(&messageInfo, args[1]);
+    load_data(&messageInfo, args[1]);
     construct_packet_client(messageInfo, NEW_SESS, USERNAME_SET, finalPacket);
     if(send_data(sockfd, finalPacket) == -1){
         return;
@@ -652,20 +660,8 @@ void quit(int nargs, char ** args, sock_t sockfd){
         printf(___space___(Usage: /quit));
         return;
     }
-
-    /** Leave rooms **/
-    if (*clientState == IN_SESSION){
-        leave_session(1, args, sockfd);
-        /** ------------------------------------------------------------------
-         * If leave session fails, the socket is closed anyways so quit acts
-         * without an ACK from the server. 
-         * -------------------------------------------------------------------*/
-        if (*clientState == IN_SESSION){
-            return;
-        }
-    }
     
-    /** Log out **/
+    /** Log out. We automatically leave rooms **/
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
 
@@ -682,7 +678,12 @@ void quit(int nargs, char ** args, sock_t sockfd){
     exit(0);
 }
 
-void send_text(char * text, sock_t sockfd){
+void send_text(int nargs, char ** args, sock_t sockfd){
+
+    if (nargs != 3){
+        printf(___space___(Usage: /send <message> <session_id>));
+        return;
+    }
 
     if (*clientState == ON_LOCAL){
         printf(___space___(You cannot send anything because 
@@ -698,7 +699,10 @@ void send_text(char * text, sock_t sockfd){
 
     struct Message messageInfo;
     char finalPacket[MAXBUFLEN];
-    strcpy(messageInfo.data, text); // load data
+
+    strcpy(messageInfo.data, args[1]); // load data
+    strcat(messageInfo.data, ",");
+    strcat(messageInfo.data, args[2]);
     construct_packet_client(messageInfo, MESSAGE, USERNAME_SET, finalPacket);
 
     // If you send text's entire buffer, you might get multiple requests containing 0s

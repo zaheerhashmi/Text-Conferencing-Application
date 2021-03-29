@@ -37,7 +37,7 @@ void leave_session(int nargs, char ** args, sock_t);
 void create_session(int nargs, char ** args, sock_t);
 void list(int nargs, char ** args, sock_t);
 void quit(int nargs, char ** args, sock_t);
-void send_text(char * text, sock_t);
+void send_text(int nargs, char ** args, sock_t);
 void clear_server_context(sock_t sockfd);
 void print_menu();
 void print_short_menu();

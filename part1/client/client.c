@@ -174,19 +174,17 @@ int main(int argc, char *argv[]){
             shortVersion = !shortVersion;
         } else if (!strcmp("/status", commandOfInterest)){
             printf(___space___(Client State: %d), *clientState);
-            printf("Current Session: %s\n", (current_session[0] == '\0') ? "NULL" : current_session);
             printf("Current my_username: %s\n", (my_username[0] == '\0') ? "NULL" : my_username);
             printf("Socket file descriptor: %d \n\n", sockfd);
         } else if (!strcmp("/h", commandOfInterest)){
             hide = !hide;
+        } else if (!strcmp("/send", commandOfInterest)){
+            send_text(nargs, args, sockfd);
         } else {
             if (*(userInput) == '/'){
                 printf("Invalid command, please try again\n");
-                continue;
-            } else {
-                send_text(text, sockfd);
-            } // else
-        } // switch
+            }
+        }
         
     } // while
     return 0;    
