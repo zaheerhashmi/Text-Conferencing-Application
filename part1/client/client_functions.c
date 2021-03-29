@@ -771,6 +771,31 @@ int are_sessions_valid(char * message){
     }
     return 1;
 }
+void send_text_all(char * text, sock_t sockfd){
+
+    if (*clientState == ON_LOCAL){
+        printf(___space___(You cannot send anything because 
+        you are not logged into the server!));
+        return;
+    }
+
+    if (*clientState == ON_SERVER){
+        printf(___space___(You cannot send text because
+        you are not in a session));
+        return;
+    }
+
+    struct Message messageInfo;
+    char finalPacket[MAXBUFLEN];
+    strcpy(messageInfo.data, text); // load data
+    construct_packet_client(messageInfo, MESSAGE_ALL, USERNAME_SET, finalPacket);
+
+    // If you send text's entire buffer, you might get multiple requests containing 0s
+    if (send_data(sockfd, finalPacket) < 0){
+        return;
+    } // if
+}
+
 void send_text(int nargs, char ** args, sock_t sockfd){
     int i;
     char * message = (char *)malloc(MAXBUFLEN);

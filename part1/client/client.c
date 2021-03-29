@@ -206,7 +206,7 @@ int main(int argc, char *argv[]){
             if (*(userInput) == '/'){
                 printf("Invalid command, please try again\n");
             } else {
-                printf("\nUse / to enter a command\n");
+                send_text_all(userInput, sockfd);
             }
         }
 

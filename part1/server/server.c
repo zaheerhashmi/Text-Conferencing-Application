@@ -338,8 +338,12 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 	}
 
 	else if (atoi(packetStruct.type) == MESSAGE){
-		message_handler(&packetStruct,clientFD,master);
+		message_handler(&packetStruct,clientFD, master);
 	}
+
+    else if (atoi(packetStruct.type) == MESSAGE_ALL){
+        message_all_handler(&packetStruct, clientFD, master);
+    }
 
 	else if(atoi(packetStruct.type) == QUERY){
 		query_handler(clientFD, master);
@@ -848,6 +852,56 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
     }
 }
 
+void message_all_handler(struct Message * packetStruct, int clientFD, fd_set *master){
+    /*For every sessionID in the current message sender, we look for it in the every client.*/
+    int i, j;
+    struct clientSessionID *curr;
+    struct Message response;
+    char ack[MAXBUFLEN], buf[MAXBUFLEN];
+    /** Deconstruct the data field **/
+    // temp loses reference here????
+
+    for (i = 0; i < 5; i++){
+        if(registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            strcpy(buf, packetStruct -> data);
+            sprintf(response.type, "%d", MESSAGE);
+            sprintf(response.size, "%d", strlen(buf));
+            strcpy(response.source, registeredClientList[i].clientID);
+            strcpy(response.data, buf);
+            strcpy(ack, response.type);
+            strcat(ack, ":");
+            strcat(ack, response.size);
+            strcat(ack, ":");
+            strcat(ack, response.source);
+            strcat(ack, ":");
+            strcat(ack, response.data);
+            curr = registeredClientList[i].sessionList;
+            while (curr != NULL){
+                write_to_file(&response, curr -> sessionID);
+                curr = curr -> next;
+            }
+    
+            for (j = 0; j < 5; j++){
+                curr = registeredClientList[i].sessionList;
+                while (curr != NULL){
+                    char ack_with_session[MAXBUFLEN];
+                    if (look_for_sessionID(curr -> sessionID, j)){
+                        strcpy(ack_with_session, ack);
+                        strcat(ack_with_session, ",");
+                        strcat(ack_with_session, curr->sessionID);
+                        if (send(registeredClientList[j].portNumber, ack_with_session, MAXBUFLEN, 0) == -1) {
+                            perror("send");
+                            return;
+                        }
+
+                    }
+                    curr = curr -> next;
+                } // while
+            } // for j
+            return;
+        }
+    } // for i
+} // message_all_handler
 
 void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
     // Storing the message // 
