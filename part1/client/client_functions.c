@@ -266,7 +266,7 @@ void handle_return_message(char * message, sock_t sockfd){
             printf(___space___(%s), messageInfo.data);
             break;
         case MESSAGE:
-            punc_delimit(messageInfo.data, 1, args, ",");
+            punc_delimit(messageInfo.data, 1, args, "|");
             printf(___space___(Message received from %s in Room %s: %s),  messageInfo.source, args[1], args[0]);
             break;
         case MSG_NACK:
@@ -284,7 +284,7 @@ void handle_return_message(char * message, sock_t sockfd){
             printf(response.data);
             break;
         case HISTORY_NACK:
-            punc_delimit(messageInfo.data, 1, args, ":");
+            punc_delimit(messageInfo.data, 1, args, "|");
             printf(___space___(Chat history retrieval for Room %s failed because %s), args[0], args[1]);
             break;
         
@@ -541,7 +541,7 @@ void *receive_loop(void * sockfd_pointer){
     char message[MAXBUFLEN + MAXBUFLEN/2 + 1];
     int numbytes = 0;
     fd_set select_fds;
-    double timeoutInterval = 3600; // Timeout interval is set to 1 hour for the time being.
+    double timeoutInterval = 300; // Timeout interval is set to 1 hour for the time being.
     struct timeval timeout;
     /* Recv from server. If there is no response in 10s, close socket and quit. */
     FD_ZERO(&select_fds);

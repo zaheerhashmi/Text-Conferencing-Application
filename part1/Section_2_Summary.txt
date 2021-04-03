@@ -1,0 +1,81 @@
+Section 2 Design:
+
+- All clients are stored in a struct, which include the following fields.
+
+struct registeredClients {
+    char clientID[MAXBUFLEN]; // client ID
+    char password[MAXBUFLEN]; // password
+    int activeStatus; // Is logged in or not
+    struct clientSessionID * sessionList; // list of sessions that the client is in.
+    int portNumber; // client's port number (socket number)
+    char clientIP[MAXBUFLEN]; // client's IP addres
+};
+
+
+1. Multiple Sessions Implementation
+
+To implement multiple sessions, we use a linked list for each client to store the rooms
+that client is in. It takes O((number of users) * (number of rooms)) to send a message
+to one room or multiple rooms.
+
+To send message to one room, we would need to go through every user and find a room that 
+they're interested in.
+
+To send message to all rooms, we would need to do the same thing.
+
+We understand this is not the most efficient design, as if we stored every user in each 
+room instead, sending message to one room would only take O(number of rooms). However,
+we used this design because it makes it more straight forward for us to print
+the rooms that each user is in, as shown below.
+
+Here is a table of users and their sessions
+        User -> harris , Session -> turtle,
+        User -> zaheer, Session -> turtle, ice_cream
+
+
+2. Invite Function
+
+3. Timeout Function
+
+Our team implementated the timeout function on the client side.
+If the client is inactive for 5 minutes, we will close the socket from the
+client side, logout the client, and force it to leave any of its rooms.
+
+
+===================================================== ADDITIONAL FEATURES ===================================================================================================
+4. Message Choosing Function
+
+Client may choose to message a specific subset of rooms that they are in.
+With the send command:
+
+    /send <SessionID1, SessionID2, SessionID3> <message>
+
+5. Chat History Function
+
+For any of the rooms that the client is in, he or she can request for the chat history from there.
+With the history command:
+
+    /history <SessionID>
+
+
+The client will see it in the command prompt in this format:
+
+This is the chat history ->
+===================== 2021-04-02 21:18:45
+. Room: turtle ===========================
+
+harris -> hi!
+zaheer -> what's up?
+prof -> Hey you two! Stop chitchatting or I'll smack you with an apple.
+
+The client will also be able to see the time that he or she has retrieved the chat history
+
+
+
+
+    
+
+
+
+
+

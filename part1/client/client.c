@@ -41,7 +41,9 @@ void print_menu(){
     printf("/createsession \t --- \t Create a new conference session and join it\n");
     printf("/list \t --- \t Get the list of the connected clients and available sessions\n");
     printf("/quit \t --- \t Terminate the program\n");
-    printf("<text> \t --- \t Send a message to the current conference session. The message is sent after the new line\n");
+    printf("/send \t --- \t Send the message to specific rooms\n");
+    printf("/history \t --- \t Get the chat history of a specific room.\n");
+    printf("<text> \t --- \t Send a message to all sessions the client is in. The message is sent after the new line\n");
     printf("\n");
     printf("To see a shorter version of the menu, press /s.");
     printf("\n");
@@ -51,7 +53,7 @@ void print_menu(){
 
 void print_short_menu(){
     printf("\n");
-    printf("/login /logout /joinsession /leavesession /createsession /list /quit <text>\n");
+    printf("/login /logout /joinsession /leavesession /createsession /list /quit /send /history <text>\n");
     printf("\n");
     printf("To see a longer version of the menu, press /s.");
     printf("\n");
@@ -206,7 +208,7 @@ int main(int argc, char *argv[]){
             if (*(userInput) == '/'){
                 printf("Invalid command, please try again\n");
             } else {
-                send_text_all(userInput, sockfd);
+                send_text_all(text, sockfd);
             }
         }
 

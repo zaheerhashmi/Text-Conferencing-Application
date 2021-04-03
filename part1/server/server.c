@@ -363,18 +363,17 @@ void history_handler(char * sessionID, int clientFD, fd_set* master){
             break;
         }
     }
-    FILE *file;
-    char filename[INPUT_LENGTH], chatroom_info[INPUT_LENGTH];
-    strcpy(filename, sessionID);
-    strcat(filename, ".txt");
-    file = fopen(filename, "r");
-    if (file == NULL){
+
+    /** -------------------------------------------------
+    * If that room doesn't exist, we can't get its history. 
+    * ---------------------------------------------------*/
+    if (!look_for_sessionID(sessionID, i)){
         struct Message responseMessage;
         // Send Acknowledgement of creation of a new session // 
         sprintf(responseMessage.type,"%d",HISTORY_NACK);
         strcpy(responseMessage.data, sessionID); // Session ID
-        strcat(responseMessage.data, ",");
-        strcpy(responseMessage.data, "Invalid Session ID");
+        strcat(responseMessage.data, "|");
+        strcat(responseMessage.data, "Invalid Session ID");
         sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
         strcpy(responseMessage.source,registeredClientList[i].clientID);
 
@@ -384,6 +383,7 @@ void history_handler(char * sessionID, int clientFD, fd_set* master){
         strcat(acknowledgement,responseMessage.source);
         strcat(acknowledgement,":");
         strcat(acknowledgement,responseMessage.data);
+        printf(acknowledgement);
                     
         if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
             perror("send");
@@ -391,9 +391,14 @@ void history_handler(char * sessionID, int clientFD, fd_set* master){
             return;
         }
         return;
-
-        // file does not exist!
     }
+    
+    FILE *file;
+    char filename[INPUT_LENGTH], chatroom_info[INPUT_LENGTH];
+    strcpy(filename, sessionID);
+    strcat(filename, ".txt");
+    file = fopen(filename, "r");
+
     // file exists!
     char * fileContents = (char *)malloc(MAXBUFLEN);
     strcpy(chatroom_info, "");
@@ -720,6 +725,8 @@ void leavesess_handler(struct Message * packetStruct, int clientFD, fd_set* mast
                     perror("send");
                 }
 
+
+
             } else {
                 // Successful //
                 sprintf(responseMessage.type,"%d",LS_ACK);
@@ -887,7 +894,7 @@ void message_all_handler(struct Message * packetStruct, int clientFD, fd_set *ma
                     char ack_with_session[MAXBUFLEN];
                     if (look_for_sessionID(curr -> sessionID, j)){
                         strcpy(ack_with_session, ack);
-                        strcat(ack_with_session, ",");
+                        strcat(ack_with_session, "|");
                         strcat(ack_with_session, curr->sessionID);
                         if (send(registeredClientList[j].portNumber, ack_with_session, MAXBUFLEN, 0) == -1) {
                             perror("send");
@@ -912,6 +919,7 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
     /** Deconstruct the data field **/
     char * temp = (char *) malloc(MAXBUFLEN/2);
     strcpy(temp, packetStruct -> data);
+    
     for (i = 0; i < 2; i++){    
         char * token = strsep(&temp, ";");
         if (token == NULL) break;
@@ -923,7 +931,7 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
             strcpy(buf, token);
         }
     }
-
+    printf(buf);
     // temp loses reference here????
 
     temp = (char *) malloc(MAXBUFLEN/2);
@@ -937,7 +945,7 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
                 if (!look_for_sessionID(sessionID, i)){
                     // We are sending messages to a room that our user does not belong too! NACK!
                     sprintf(responseMessage.type,"%d", MSG_NACK);
-                    strcpy(responseMessage.data, sessionID);
+                    strcpy(responseMessage.data, sessionID_string);
                     sprintf(responseMessage.size,"%d", strlen(responseMessage.data));
                     strcpy(responseMessage.source, packetStruct -> source);
 
@@ -979,13 +987,16 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
     strcat(ack, ":");
     strcat(ack, response.data);
 
-    /** Write to all session IDS **/
-    struct clientSessionID * curr = registeredClientList[i].sessionList;
-    while (curr != NULL){
-        write_to_file(&response, curr -> sessionID);
-        curr = curr -> next;
+    /** Write to sessionID you are sending **/
+    temp = (char *) malloc(MAXBUFLEN/2);
+    strcpy(temp, sessionID_string);
+    for (j = 0; true; j++){
+        char * sessionID = strsep(&temp, ",");
+        if (sessionID == NULL) break;
+        if (look_for_sessionID(sessionID, i)){
+            write_to_file(&response, sessionID);
+        } 
     }
-    
 
     /* Debug Notes: Make sure sessionID is right, and make sure the port numbers are right*/
     for(i = 0; i < 5; i ++ ){
@@ -1005,7 +1016,7 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
             if(look_for_sessionID(sessionID, i)){
                 char ack_with_session[MAXBUFLEN];
                 strcpy(ack_with_session, ack);
-                strcat(ack_with_session, ",");
+                strcat(ack_with_session, "|");
                 strcat(ack_with_session, sessionID);
                 if (send(registeredClientList[i].portNumber, ack_with_session, MAXBUFLEN, 0) == -1) {
                     perror("send");
