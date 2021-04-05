@@ -41,21 +41,16 @@ Here are some assumptions:
     - A client may accept or deny a request 
     - The invitation does not have any message
     - Guest must be active to be invited
-    - A guest will be removed from the session he is in if he accepts the invitation 
 
 Packets being designed: 
 1) INVITE packet
     - This packet is to be sent by the inviter
     - Data: <guest> // guest is the name of the invitee
 2) IN_ACK
-    - This is to be sent only if the invitee accepts the ACK
-3) ACCEPT_IN
-    - Server here should check if the guest is ACTIVE 
-    - This is sent to the server by the guest 
-    - If the guest accepts
-4) DECLINE_IN
-    - Guest sends this to the server
-5) IN_NACK
+    - Sent by invitee to server and server forwards to the inviter 
+
+3) IN_NACK
+    - Sent by invitee to the server; server forwards
     - Server should send this to the inviter in the following scenerios
         - Inviter is not part of a session
         - The guest is not active
