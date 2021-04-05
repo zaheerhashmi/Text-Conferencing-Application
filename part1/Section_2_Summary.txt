@@ -11,6 +11,7 @@ struct registeredClients {
     char clientIP[MAXBUFLEN]; // client's IP addres
 };
 
+=========================================================================================================================
 
 1. Multiple Sessions Implementation
 
@@ -32,6 +33,7 @@ Here is a table of users and their sessions
         User -> harris , Session -> turtle,
         User -> zaheer, Session -> turtle, ice_cream
 
+=========================================================================================================================
 
 2. Invite Function
 
@@ -57,6 +59,49 @@ Packets being designed:
         - The guest declined the invitation request
         - The guest is already in your own session
 
+-------------------------------------------------------------------------------------------------------------------------
+=========================================================================================================================
+-------------------------------------------------------------------------------------------------------------------------
+
+    Inviter:
+    /invite <sessionID>,<guest> (INVITE PACKET : inviter -> server)
+    
+
+    ### ZAHEER ###
+    Make sure guest active status is 1, make sure inviter is in sessionID (find portnumber of inviter, look_for_session_id).
+    
+    Server:
+    Send invite to invitee (SEND TO INVITEE PACKET: server -> invitee)
+    /send_invite_to_invitee <sessionID>,<inviter>
+
+    Invite handler function done.
+
+    ### HARRIS ####
+    If we received SEND TO INVITEE packet in the receive thread,
+    we assign recv_invite = True. This would notify the main thread
+    to answer a yes or no to the invite. Once the main thread answers to yes or no,
+    we notify the recv thread that an answer has been given. 
+    
+    Note: While we are deciding if we answer yes or no,
+    we would also need to sleep the receive thread, and hold a queue to process tasks
+    (we already have this (select statement). Just add a lock to ensure synchronization.)
+    Once main thread answers yes or no, we wakeup receive thread and send 
+    IN_ACK or IN_NACK right away in handle_return message. (INVITEE TO SERVER PACKET: invitee -> server)
+
+    If IN_ACK:
+    call /joinsession <sessionID> in handle_return_message
+    If IN_NACK:
+    We don't do anything
+    
+    ### ZAHEER ###
+    for BOTH_CASES;
+    Server forwards
+    IN_ACK or IN_NACK to inviter.
+
+    4 packets in total.
+
+
+======================================================== TIMEOUT =============================================================================
 3. Timeout Function
 
 Our team implementated the timeout function on the client side.
