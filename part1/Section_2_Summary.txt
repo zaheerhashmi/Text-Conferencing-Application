@@ -35,6 +35,33 @@ Here is a table of users and their sessions
 
 2. Invite Function
 
+INVITE functionality has both server and client side functionality. 
+Here are some assumptions:
+    - Client can only invite clients to a session it is in by itself
+    - A client may accept or deny a request 
+    - The invitation does not have any message
+    - Guest must be active to be invited
+    - A guest will be removed from the session he is in if he accepts the invitation 
+
+Packets being designed: 
+1) INVITE packet
+    - This packet is to be sent by the inviter
+    - Data: <guest> // guest is the name of the invitee
+2) IN_ACK
+    - This is to be sent only if the invitee accepts the ACK
+3) ACCEPT_IN
+    - Server here should check if the guest is ACTIVE 
+    - This is sent to the server by the guest 
+    - If the guest accepts
+4) DECLINE_IN
+    - Guest sends this to the server
+5) IN_NACK
+    - Server should send this to the inviter in the following scenerios
+        - Inviter is not part of a session
+        - The guest is not active
+        - The guest declined the invitation request
+        - The guest is already in your own session
+
 3. Timeout Function
 
 Our team implementated the timeout function on the client side.
