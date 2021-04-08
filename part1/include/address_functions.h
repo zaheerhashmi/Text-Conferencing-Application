@@ -45,7 +45,10 @@ enum packet_type{
     HISTORY_ACK,
     HISTORY_NACK,
     INVITE,
+    JN_INVITE_NACK,
     INVITEE,
+    SEND_INVITE_NACK,
+    SEND_INVITE_ACK,
     IN_ACK,
     IN_NACK,
     TEST

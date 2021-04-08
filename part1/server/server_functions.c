@@ -82,6 +82,7 @@ int delete_session_id(struct Message * packetStruct, int i){
                     free(curr);
                     curr = NULL;
                 } else {
+                    // Remhead
                     registeredClientList[i].sessionList = curr -> next;
                     free(curr);
                     curr = NULL;
@@ -160,4 +161,5 @@ int count_sessions(int index){
 
     return count;
 }
+
     

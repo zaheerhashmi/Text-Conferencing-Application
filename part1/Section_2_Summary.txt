@@ -44,21 +44,31 @@ The Invite Protocol:
 1) INVITE packet
     - Inviter sends packet
     - Data sent: <sessionID>,<guest> // guest is the name of the invitee
-    - If the invitee is already in the sessionID sent by the inviter, invite is unacknowledged
-    by the INVITE_NACK packet.
+    - If sessionID is invalid or guest is already in sessionID, SEND_INVITE_NACK is sent (unacknowledged)
+    - If guest does not exist or is inactive, SEND_INVITE_NACK is sent (unacknowledged).
 
-2) SEND_TO_INVITEE packet
+2) INVITEE packet that is forwarded to the client
     - This packet forwards inviter's invite
-    - Data sent: <sessionID>,<inviter>
+    - Data sent: <inviter>,<sessionID>,<userID>
 
 3) IN_ACK packet
     - If invitee accepts invite, forward IN_ACK packet to server. 
     - Invitee also joins sessionID sent by the inviter.
     - Server then forwards this packet directly to the inviter.
-    - Data sent: <sessionID>,<userID> 
+    - Data sent: <inviter>,<sessionID>,<userID>
 
 3) IN_NACK
-    - If invitee rejects invite, server forwards IN_NACK packet to the server 
+    - If invitee rejects invite, server forwards IN_NACK packet to the server
+
+    - Invalid sessionID
+
+4) JN_INVITE_NACK 
+     - IF Inviter left session after send invite to invitee,
+join session should not enable invitee to join a non-existing session.
+However, we want to tell the invitee the reason that he or she
+is rejected for joining the session (because inviter has left the session
+so your acceptance to join the room did not work)
+    - Data sent: <sessionID>
 
 Constraints:
     - Client can only invite clients to a session it is in by itself

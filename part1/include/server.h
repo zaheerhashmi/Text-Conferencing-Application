@@ -36,15 +36,18 @@ extern struct IPInfo info;
 int get_active();
 void message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr,fd_set* master, int fdmax, int listener);
 void login_handler(struct Message * packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master);
-void exit_handler(int clientFD,fd_set* master);
+void exit_handler(int clientFD,fd_set* master, bool);
 void newsess_handler(struct Message * packetStruct, int clientFD,fd_set* master);
 void leavesess_handler(struct Message * packetStruct, int clientFD, fd_set* master);
 void join_handler(struct Message * packetStruct,int clientFD,fd_set* master);
 void message_handler(struct Message* packetStruct,int clientFD, fd_set* master);
 void message_all_handler(struct Message * packetStruct, int clientFD, fd_set *master);
 void query_handler(int clientFD, fd_set* master);
-void history_handler(char * sessionID, int clientFD, fd_set* master);
+int history_handler(char * sessionID, int clientFD, fd_set* master);
 void delete_history_if_session_doesnt_exist(char * sessionID);
+void invite_handler (char* packetData, int clientFD, fd_set* master);
+void send_invite(char* guest, char* inviter, char* sessionID);
+void forward_message(struct Message packetStruct, int clientFD, fd_set* master);
 
 // Session ID functions //
 void add_session_id(struct Message * packetStruct, int i);

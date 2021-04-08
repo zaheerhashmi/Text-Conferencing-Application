@@ -22,6 +22,7 @@ struct IPInfo info;
 enum state * clientState;
 bool forked = false;
 bool recv_invite = false;
+pthread_mutex_t client_side_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t dummy_mutex = PTHREAD_MUTEX_INITIALIZER; // This is so that when we wait for client response
 // We would not get any other messages
@@ -157,6 +158,7 @@ int main(int argc, char *argv[]){
          *  
          * -------------------------------- */
         // printf("%d", recv_invite);
+         printf(___space___(Have you ran make yet?));
         if (!recv_invite){
             fgets(userInput, INPUT_LENGTH, stdin);
             process_user_input(userInput);
@@ -170,7 +172,12 @@ int main(int argc, char *argv[]){
                     send_invite_response(IN_ACK, sockfd);
                     args[1] = (char *) malloc(MAXBUFLEN*sizeof(char));
                     strcpy(args[1], inviteSession);
+                    // printf(___space___(===================================================\nJOIN SESSION START==================================\n));
+                    sleep(0.25);
+                    // pthread_mutex_lock(&client_side_mutex);
                     join_session(2, args, sockfd);
+                    // pthread_mutex_unlock(&client_side_mutex);
+                    // printf(___space___(===================================================\nJOIN SESSION ENDED==================================\n));
                     break;
                     // send IN ACK
                 } else if(!strcmp(userInput, "N") || !strcmp(userInput, "n")){
@@ -183,8 +190,9 @@ int main(int argc, char *argv[]){
                 }
             } // while
             // Client response has been registered
+            // pthread_mutex_lock(&client_side_mutex);
             pthread_cond_signal(&client_response);
-            pthread_mutex_unlock(&dummy_mutex);
+            // pthread_mutex_unlock(&client_side_mutex);
             recv_invite = false;
             continue;
         }
@@ -245,6 +253,8 @@ int main(int argc, char *argv[]){
                 send_text_all(text, sockfd);
             }
         }
+
+       
 
         /** We will just remove some garbage pointers now**/
         for (i = 0; i < 30; i++){

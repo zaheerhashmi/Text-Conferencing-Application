@@ -293,10 +293,11 @@ while(socketFound == 0){
                         /* On error, we make client inactive. */
                         for (j = 0; j < 5; j++){
                             if (registeredClientList[j].portNumber == i){
-                               exit_handler(i, &master);
+                               exit_handler(i, &master, true);
+                               break;
                             }
                         }
-                        close(i); // bye!
+                        // close(i); // bye!
                     } else {
 						// Got data from client: Process data //
                         // printf("About to do message handling \n");
@@ -327,7 +328,7 @@ int get_active(){
 
 void message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr,fd_set* master, int fdmax, int listener){
     pthread_mutex_lock(&mutex);
-    printf(___space___(This is the message that we are receiving: %s), message);
+    printf(___space___(This is the message that we are receiving at the server: %s), message);
 	// Loading up message struct // 
 	struct Message packetStruct;
 	deconstruct_packet(&packetStruct,message);
@@ -339,7 +340,7 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 	}
 
 	else if(atoi(packetStruct.type) == EXIT){
-		exit_handler(clientFD,master);
+		exit_handler(clientFD,master,false);
 	}
 
 	else if (atoi(packetStruct.type) == JOIN){
@@ -363,8 +364,10 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
     }
 
 	else if(atoi(packetStruct.type) == QUERY){
-		query_handler(clientFD, master);
-	} else if(atoi(packetStruct.type) == HISTORY){
+		query_handler(clientFD, master);   
+	}
+    
+    else if(atoi(packetStruct.type) == HISTORY){
         history_handler((packetStruct.data), clientFD, master);
     } else if (atoi(packetStruct.type) == TEST){
 
@@ -391,13 +394,261 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
             return;
         }
     }
+
+    else if (atoi(packetStruct.type) == INVITE){
+        invite_handler((packetStruct.data),clientFD,master);
+    }
+
+    else if (atoi(packetStruct.type) == IN_ACK || atoi(packetStruct.type) == IN_NACK){
+        forward_message(packetStruct, clientFD, master);
+    }
+
     pthread_mutex_unlock(&mutex);
 
 }
 
 /////////////////////////////////////////////////// HELPER FUNCTIONS /////////////////////////////////////////////////
 
-void history_handler(char * sessionID, int clientFD, fd_set* master){
+void forward_message(struct Message packetStruct, int clientFD, fd_set* master){
+    int i, inviterPortNumber;
+    char inviter[MAXBUFLEN], sessionID[MAXBUFLEN];
+    char * temp = (char *)malloc(MAXBUFLEN * sizeof(char));
+    strcpy(temp, packetStruct.data);
+    for (i = 0; i < 2; i++){
+        char * token = strsep(&temp, ",");
+        if (token == NULL) break;
+        if (i == 0){
+            strcpy(inviter, token);
+        } else if (i == 1){
+            strcpy(sessionID, token);
+        }
+    }  
+
+    // find inviter to forward invite accept/decline to
+    for (i=0;i<5;i++){
+        if (!strcmp(registeredClientList[i].clientID, inviter)){
+            
+            inviterPortNumber = registeredClientList[i].portNumber;
+            
+            // If session does not exist in inviter anymore, invite failed.
+            // Tell user join session failed because room has been emptied.
+            if (!look_for_sessionID(sessionID, i)){
+                struct Message responseMessage;
+                // Send Acknowledgement of creation of a new session // 
+                sprintf(responseMessage.type,"%d", JN_INVITE_NACK);
+                strcpy(responseMessage.data, sessionID); 
+                sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                strcpy(responseMessage.source,"I don't care");
+
+                char* acknowledgement = strcat(responseMessage.type,":");
+                strcat(acknowledgement,responseMessage.size);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.source);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.data);
+                printf(acknowledgement);
+
+                if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                    perror("send");
+                    exit_handler(clientFD, master, true);
+                    // Done with this we can return now //
+                    return;
+                }
+            }
+            break;
+        }
+    }
+
+    
+    char* acknowledgement = strcat(packetStruct.type,":");
+    strcat(acknowledgement,packetStruct.size);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,packetStruct.source);
+    strcat(acknowledgement,":");
+    strcat(acknowledgement,packetStruct.data);
+    printf("Forward Message: %s", acknowledgement);
+                
+    if (send(inviterPortNumber,acknowledgement, MAXBUFLEN, 0) == -1) {
+        perror("send");
+        exit_handler(clientFD, master, true);
+        // Done with this we can return now //
+        return;
+    }
+
+} // 
+void send_invite(char* guest, char* inviter, char* sessionID){
+
+    int i;
+    int portNumber;
+
+    // Obtain the socket of the guest // 
+
+    for (i = 0; i < 5; i++){
+        if(!(strcmp(guest,registeredClientList[i].clientID))){
+            portNumber = registeredClientList[i].portNumber;
+            break;
+        }
+    }
+
+    struct Message responseMessage;
+    sprintf(responseMessage.type,"%d",INVITEE);
+    strcpy(responseMessage.data, "");
+    strcat(responseMessage.data,inviter);
+    strcat(responseMessage.data,",");
+    strcat(responseMessage.data,sessionID);
+    strcat(responseMessage.data,",");
+    strcat(responseMessage.data,guest);
+    sprintf(responseMessage.size,"%d",strlen(responseMessage.data));
+    strcpy(responseMessage.source,"");
+
+    char * invite = (char *)malloc(MAXBUFLEN);
+    strcpy(invite, "");
+    strcat(invite, responseMessage.type);
+    strcat(invite, ":");
+    strcat(invite,responseMessage.size);
+    strcat(invite,":");
+    strcat(invite,responseMessage.source);
+    strcat(invite,":");
+    strcat(invite,responseMessage.data);
+
+printf("%s", invite);
+if (send(portNumber,invite, MAXBUFLEN, 0) == -1) {
+    perror("send");
+    // exit_handler
+    // Done with this we can return now //
+    return;
+}
+}
+
+void invite_handler(char* packetData, int clientFD, fd_set* master){
+    
+    // Error Checking: Check if the iniviter isActive && the sessionID exists//
+    // If the above is true then check if the invitee isActive; if they are then send the inivitation//
+
+    int i;
+    int j;
+    char* sessionID = (char *) malloc(MAXBUFLEN);
+    char* guest = (char *) malloc(MAXBUFLEN);
+    struct Message responseMessage;
+    char* token;
+
+    // Obtaining sessionID and guest name from the data sent by the iniviter // 
+        // Obtaining the clientID and password from the message sent by the client //
+    for(i = 0; i < 2 ; i++){
+        token = strsep(&(packetData), ",");
+        if (token == NULL) break;
+        if (i == 0)
+            strcpy(sessionID, token);
+        else if (i == 1)
+            strcpy(guest, token);
+    } 
+
+    // Loop through and ensure that the inviter isActive and session ID exists // 
+        for (i=0;i<5;i++){
+        if (registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            break;
+        }
+    }
+
+    // Check if sessionID is valid // 
+    int validSession = look_for_sessionID(sessionID,i);
+    int activeGuest = 0;
+    int guestAlreadyInSession = 0;
+
+    // Check if guest is Active // 
+
+    for(j=0; j<5; j++){
+        if(!strcmp(guest,registeredClientList[j].clientID) && registeredClientList[j].activeStatus == 1){
+            activeGuest = 1;
+            if(look_for_sessionID(sessionID, j)){
+                guestAlreadyInSession = 1;
+                break;
+            }
+        }
+    }
+
+    // If sessionID is valid and guest isActive send invite to guest // 
+
+    if (validSession && activeGuest ){
+        char* inviter = registeredClientList[i].clientID;
+        send_invite(guest,inviter,sessionID);
+    }
+
+    // Invalid sessionID -> Send IN_NACK to inviter with message "Invalid sessionID" // 
+    else if(validSession == 0){
+            sprintf(responseMessage.type,"%d",SEND_INVITE_NACK);
+            strcpy(responseMessage.data, "Invalid sessionID"); // Session ID
+            sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+            strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+            char* acknowledgement = strcat(responseMessage.type,":");
+            strcat(acknowledgement,responseMessage.size);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.source);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.data);
+            
+            printf("%s", acknowledgement);
+            if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                perror("send");
+                // Done with this we can return now //
+                return;
+            }
+    }
+
+    // Inactive guest -> Send IN_NACK to inviter with message "Guest inactive"
+    else if(guestAlreadyInSession == 1){
+
+            sprintf(responseMessage.type,"%d",SEND_INVITE_NACK);
+            strcpy(responseMessage.data, "Guest is already in session. No need to send invite."); // Session ID
+            sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+            strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+            char* acknowledgement = strcat(responseMessage.type,":");
+            strcat(acknowledgement,responseMessage.size);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.source);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.data);
+            
+            printf("%s", acknowledgement);
+            if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                perror("send");
+                // Done with this we can return now //
+                return;
+            }
+    } 
+    else if(activeGuest == 0){
+
+            sprintf(responseMessage.type,"%d",SEND_INVITE_NACK);
+            strcpy(responseMessage.data, "Guest is inactive or does not exist."); // Session ID
+            sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+            strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+            char* acknowledgement = strcat(responseMessage.type,":");
+            strcat(acknowledgement,responseMessage.size);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.source);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.data);
+            
+            printf("%s", acknowledgement);
+            if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                perror("send");
+                // Done with this we can return now //
+                return;
+            }
+    } 
+
+
+}
+
+
+
+
+
+
+int history_handler(char * sessionID, int clientFD, fd_set* master){
     int i;
     for (i=0;i<5;i++){
         if (registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
@@ -429,9 +680,9 @@ void history_handler(char * sessionID, int clientFD, fd_set* master){
         if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
             perror("send");
             // Done with this we can return now //
-            return;
+            return -1;
         }
-        return;
+        return 0;
     }
     
     FILE *file;
@@ -469,10 +720,10 @@ void history_handler(char * sessionID, int clientFD, fd_set* master){
         perror("send");
         fclose(file);
         // Done with this we can return now //
-        return;
+        return -1;
     }
     fclose(file);
-    return;
+    return 0;
 }
 void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_storage remoteaddr,fd_set* master){
     // Parse out the client ID and password from the Messange and Compare with entries in the client register //
@@ -538,9 +789,10 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                  
                 if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
                     perror("send");
-                    exit_handler(clientFD, master);
+                    exit_handler(clientFD, master, true);
+                    return;
                 }
-                exit_handler(clientFD, master);
+                exit_handler(clientFD, master, false);
                 return;
                 // Client was not active // 
             } else {
@@ -566,11 +818,11 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                     
                     if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
                         perror("send");
-
-                        
+                        exit_handler(clientFD, master, true);
+                        return;
                     }
 
-                    exit_handler(clientFD, master);
+                    exit_handler(clientFD, master, false);
                     return; 
                 }
                 /** -------------------------------
@@ -605,6 +857,7 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
                  
                 if (send(clientFD, acknowledgement, MAXBUFLEN, 0) == -1) {
                     perror("send");
+                    exit_handler(clientFD, master, true);
                 }
 
                 return;
@@ -630,13 +883,18 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
     // printf("This is the acknowledgement: %s", acknowledgement);
     if (send(clientFD, acknowledgement, MAXBUFLEN, 0) == -1) {
         perror("send");
-        exit_handler(clientFD, master);
+        exit_handler(clientFD, master, true);
+        return;
     }
-    exit_handler(clientFD, master);
+    exit_handler(clientFD, master, false);
 
 }
 
-void exit_handler(int clientFD, fd_set* master){
+void exit_handler(int clientFD, fd_set* master, bool sock_dead){
+    /** 
+     * Remember to deal with broken pipe. If sock_dead == True, we don't write to any socket
+     * **/
+    
     int i,j;
     // Find the the client in register and update // 
     for(i=0; i<5; i++){
@@ -646,11 +904,14 @@ void exit_handler(int clientFD, fd_set* master){
             char * temp = (char *)malloc(MAXBUFLEN * sizeof(char));
             strcpy(temp, sessions);
             // Download every single session file to local
-            for (j=0; true; j++){
-                char * session = strsep(&temp, ",");
-                pad_space(session);
-                if (session == NULL || strlen(session) == 0) break;
-                history_handler(session, clientFD, master);
+
+            if (!sock_dead){
+               for (j=0; true; j++){
+                    char * session = strsep(&temp, ",");
+                    pad_space(session);
+                    if (session == NULL || strlen(session) == 0) break;
+                    history_handler(session, clientFD, master);
+                }
             }
             // Delete session IDS
             delete_all_session_ids(i);
@@ -663,29 +924,37 @@ void exit_handler(int clientFD, fd_set* master){
                 delete_history_if_session_doesnt_exist(session);
             }
             
-            // NULL values
             registeredClientList[i].activeStatus = 0;
             registeredClientList[i].portNumber = 0;
             memset(&registeredClientList[i].clientIP[0], 0, sizeof(registeredClientList[i].clientIP));
-            struct Message responseMessage;
-            // ACKNOWLEDGE logout
-            // Send Acknowledgement of creation of a new session // 
-            sprintf(responseMessage.type,"%d", LOGOUT_ACK);
-            strcpy(responseMessage.data, ""); // Session ID
-            sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
-            strcpy(responseMessage.source,registeredClientList[i].clientID);
+            if (!sock_dead){
+                struct Message responseMessage;
+                // ACKNOWLEDGE logout
+                // Send Acknowledgement of creation of a new session // 
+                sprintf(responseMessage.type,"%d", LOGOUT_ACK);
+                strcpy(responseMessage.data, ""); // Session ID
+                sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+                strcpy(responseMessage.source,registeredClientList[i].clientID);
 
-            char* acknowledgement = strcat(responseMessage.type,":");
-            strcat(acknowledgement,responseMessage.size);
-            strcat(acknowledgement,":");
-            strcat(acknowledgement,responseMessage.source);
-            strcat(acknowledgement,":");
-            strcat(acknowledgement,responseMessage.data);
-                        
-            if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
-                perror("send");
-                // Done with this we can return now //
-                return;
+                char* acknowledgement = strcat(responseMessage.type,":");
+                strcat(acknowledgement,responseMessage.size);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.source);
+                strcat(acknowledgement,":");
+                strcat(acknowledgement,responseMessage.data);
+                            
+                if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                    /** ------------------------------- 
+                     * If we notice that the socket has abruptly quit,
+                     * we need to also abruptly close the client socket.
+                    */
+                    
+                    perror("send");
+                    close(clientFD);
+                    FD_CLR(clientFD,master);
+                    // Done with this we can return now //
+                    return;
+                }
             }
             break;
         }
@@ -968,7 +1237,7 @@ void join_handler(struct Message* packetStruct,int clientFD,fd_set* master){
         if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
             perror("send"); 
             free(sessionID); 
-            exit_handler(clientFD, master);
+            exit_handler(clientFD, master, true);
             return;
         }
 
@@ -1015,6 +1284,7 @@ void message_all_handler(struct Message * packetStruct, int clientFD, fd_set *ma
                         strcat(ack_with_session, curr->sessionID);
                         if (send(registeredClientList[j].portNumber, ack_with_session, MAXBUFLEN, 0) == -1) {
                             perror("send");
+                            exit_handler(clientFD, master, true);
                             return;
                         }
 
@@ -1075,7 +1345,8 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
                                     
                     if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
                         perror("send");  
-                        exit_handler(clientFD, master);
+                        exit_handler(clientFD, master, true);
+                        return;
                     }
                     return;
                 }
@@ -1140,7 +1411,7 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set *master){
                 }
 
             }
-            free(sessionID);
+
         }
     }
 }
@@ -1206,7 +1477,7 @@ void query_handler(int clientFD, fd_set* master){
     printf("Ack %s", acknowledgement);
     if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
         perror("send");  
-        exit_handler(clientFD, master);
+        exit_handler(clientFD, master, true);
     }
 
 }

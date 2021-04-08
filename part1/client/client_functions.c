@@ -246,7 +246,7 @@ void send_test(int nargs, char ** args, sock_t sockfd){
 
 void send_invite(int nargs, char ** args, sock_t sockfd){
     if (nargs != 3){
-        printf(___space___(Usage: /invite <sessionID> <inviter>));
+        printf(___space___(Usage: /invite <sessionID> <guest>));
         return;
     }
     
@@ -284,7 +284,7 @@ void send_invite_response(enum packet_type type, sock_t sockfd){
     struct Message packetStruct;
     char finalPacket[MAXBUFLEN];
     char data[MAXBUFLEN];
-    sprintf(data, "%s,%s", inviteSession, my_username);
+    sprintf(data, "%s,%s,%s", inviter, inviteSession, my_username);
     load_data(&packetStruct, data);
 
     /* Construct invite packet.*/
@@ -298,7 +298,7 @@ void send_invite_response(enum packet_type type, sock_t sockfd){
 } // send_invite_response
 
 void handle_return_message(char * message, sock_t sockfd){
-    printf(___space___(This is the ack that we have received: %s), message);
+    printf(___space___(This is the ack that we have received at the client: %s), message);
     
     struct Message messageInfo;
     deconstruct_packet(&messageInfo, message);
@@ -370,7 +370,7 @@ void handle_return_message(char * message, sock_t sockfd){
             printf(___space___(Message received from %s in Room %s: %s),  messageInfo.source, args[1], args[0]);
             break;
         case MSG_NACK:
-            printf(___space___(Message not sent because %s does not exist), messageInfo.data);
+            printf(___space___(Message not sent because one of %s does not exist), messageInfo.data);
             break;
         case HISTORY_ACK:
             punc_delimit(messageInfo.data, 1, args, "|");
@@ -404,9 +404,9 @@ void handle_return_message(char * message, sock_t sockfd){
             printf(___space___(Chat history retrieval for Room %s failed because %s), args[0], args[1]);
             break;
         case INVITEE:
-            punc_delimit(messageInfo.data, 1, args, ",");
-            strcpy(inviteSession, args[0]); // Exepcting session
-            strcpy(inviter, args[1]); // Expecting zaheer
+            punc_delimit(messageInfo.data, 3, args, ",");
+            strcpy(inviteSession, args[1]); // Expecting session
+            strcpy(inviter, args[0]); // Expecting inviter
             recv_invite = true;
             pthread_mutex_lock(&dummy_mutex);
             printf(___space___(You have a pending invite. Finish your next command or press enter to see the invite.)); 
@@ -418,8 +418,24 @@ void handle_return_message(char * message, sock_t sockfd){
              * recorded
              * --------------------------- */
             break;
+            
+        case SEND_INVITE_NACK:
+            printf(___space___(Invite not sent because %s), messageInfo.data);
+            break;
+            
         case IN_ACK:
-            printf(___space___(User %s acknowledged your invitation to room %s), args[0], args[1]); 
+            punc_delimit(messageInfo.data, 2, args, ",");
+            printf(___space___(User %s acknowledged your invitation to room %s), args[2], args[1]); 
+            break;
+        
+        case IN_NACK:
+            punc_delimit(messageInfo.data, 2, args, ",");
+            printf(___space___(User %s rejected your invitation to room %s), args[2], args[1]);
+            break;
+
+        case JN_INVITE_NACK:
+            printf(___space___(Your acceptance to join room %s failed because everyone has left the room), messageInfo.data);
+            break;
     } // switch
     pthread_mutex_unlock(&mutex);
 }
@@ -751,7 +767,7 @@ void join_session(int nargs, char ** args, sock_t sockfd){
     
     /* Construct the message packet.*/
     construct_packet_client(messageInfo, JOIN, USERNAME_SET, finalPacket);
-
+    printf(___space___(================= ABOUT TO JOIN SESSION ====================));
     /* Send join message */
     if(send_data(sockfd, finalPacket) == -1){
         perror(___space___(Client: join failed));
