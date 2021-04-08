@@ -16,13 +16,13 @@ struct registeredClients {
 1. Multiple Sessions Implementation
 
 To implement multiple sessions, we use a linked list for each client to store the rooms
-that client is in. It takes O((number of users) * (number of rooms)) to send a message
+that the client is in. It takes O((number of users) * (number of rooms)) to send a message
 to one room or multiple rooms.
 
-To send message to one room, we would need to go through every user and find a room that 
-they're interested in.
+For client who sends message to one specific room, we would need to check the rooms that each user is in and send the
+message to a user if he or she is in the room.
 
-To send message to all rooms, we would need to do the same thing.
+For a client who sends message to all rooms, we would need to do the same thing but for multiple rooms.
 
 We understand this is not the most efficient design, as if we stored every user in each 
 room instead, sending message to one room would only take O(number of rooms). However,
@@ -38,33 +38,39 @@ Here is a table of users and their sessions
 2. Invite Function
 
 INVITE functionality has both server and client side functionality. 
-Here are some assumptions:
-    - Client can only invite clients to a session it is in by itself
-    - A client may accept or deny a request 
-    - The invitation does not have any message
-    - Guest must be active to be invited
 
-Packets being designed: 
+
+The Invite Protocol: 
 1) INVITE packet
-    - This packet is to be sent by the inviter
-    - Data: <guest> // guest is the name of the invitee
-2) IN_ACK
-    - Sent by invitee to server and server forwards to the inviter 
+    - Inviter sends packet
+    - Data sent: <sessionID>,<guest> // guest is the name of the invitee
+    - If the invitee is already in the sessionID sent by the inviter, invite is unacknowledged
+    by the INVITE_NACK packet.
+
+2) SEND_TO_INVITEE packet
+    - This packet forwards inviter's invite
+    - Data sent: <sessionID>,<inviter>
+
+3) IN_ACK packet
+    - If invitee accepts invite, forward IN_ACK packet to server. 
+    - Invitee also joins sessionID sent by the inviter.
+    - Server then forwards this packet directly to the inviter.
+    - Data sent: <sessionID>,<userID> 
 
 3) IN_NACK
-    - Sent by invitee to the server; server forwards
-    - Server should send this to the inviter in the following scenerios
-        - Inviter is not part of a session
-        - The guest is not active
-        - The guest declined the invitation request
-        - The guest is already in your own session
+    - If invitee rejects invite, server forwards IN_NACK packet to the server 
+
+Constraints:
+    - Client can only invite clients to a session it is in by itself
+    - Client cannot invite clients to a non-existing session.
+    - Client cannot invite non-existing clients.
 
 -------------------------------------------------------------------------------------------------------------------------
-=========================================================================================================================
+========================================= Specifics =====================================================================
 -------------------------------------------------------------------------------------------------------------------------
 
     Inviter:
-    /invite <sessionID>,<guest> (INVITE PACKET : inviter -> server)
+    /invite <sessionID> <guest> (INVITE PACKET : inviter -> server)
     
 
     ### ZAHEER ###
@@ -88,6 +94,11 @@ Packets being designed:
     Once main thread answers yes or no, we wakeup receive thread and send 
     IN_ACK or IN_NACK right away in handle_return message. (INVITEE TO SERVER PACKET: invitee -> server)
 
+    Things that I want to Test:
+    - IN_ACK and IN_NACK packet gets sent correctly.
+    - How does the client receive messages after he or she answers yes or no? Is there an
+    uncomfortable dump of information? Or is the information tolerable?
+
     If IN_ACK:
     call /joinsession <sessionID> in handle_return_message
     If IN_NACK:
@@ -106,7 +117,9 @@ Packets being designed:
 
 Our team implementated the timeout function on the client side.
 If the client is inactive for 5 minutes, we will close the socket from the
-client side, logout the client, and force it to leave any of its rooms.
+client side. The server will notice that the client has hanged,
+and takes steps to logout the client and force it to leave any of the rooms
+he or she is in.
 
 
 ===================================================== ADDITIONAL FEATURES ===================================================================================================
@@ -117,6 +130,16 @@ With the send command:
 
     /send <SessionID1, SessionID2, SessionID3> <message>
 
+Constraints:
+- You have to be in a room(s) to send message to the rooms.
+- You cannot send the character "|" in your message because the server receives the data like this: 
+    <SessionID1, SessionID2, ...>|<message> 
+
+We use "|" as a separator for the data field in our packet from client to server, so including "|" in the message
+will mess up the processing of the message on the server side and thus, 
+mess up the message once it gets sent back to client(s). I know, boolean algebra nerds might not like this,
+but Computer Networks doesn't care about boolean algebra :)))) Also, this is not a regex course.
+
 5. Chat History Function
 
 For any of the rooms that the client is in, he or she can request for the chat history from there.
@@ -124,6 +147,9 @@ With the history command:
 
     /history <SessionID>
 
+The history for a room is also sent to the client and downloaded when the client leaves that room.
+When the client logs out, session histories for all rooms are sent to the client and downloaded.
+If a room has no clients in it, its session history will be removed from the server.
 
 The client will see it in the command prompt in this format:
 
@@ -136,6 +162,10 @@ zaheer -> what's up?
 prof -> Hey you two! Stop chitchatting or I'll smack you with an apple.
 
 The client will also be able to see the time that he or she has retrieved the chat history
+
+Constraints:
+- You cannot check the chat history of a room that you are not in.
+- You cannot check the chat history of a room that doesn't exist.
 
 
 

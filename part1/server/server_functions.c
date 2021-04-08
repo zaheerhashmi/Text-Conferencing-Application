@@ -67,6 +67,7 @@ int delete_session_id(struct Message * packetStruct, int i){
     struct clientSessionID * curr;
     struct clientSessionID * prev;
     curr = registeredClientList[i].sessionList;
+    prev = curr;
     while (curr != NULL){
         if (!strcmp(curr -> sessionID, packetStruct -> data)){
             if (count_sessions(i) == 1){
@@ -75,10 +76,16 @@ int delete_session_id(struct Message * packetStruct, int i){
                 free(curr);
                 curr = NULL;
             } else {
-                prev -> next = curr -> next;
-                curr -> next = NULL;
-                free(curr);
-                curr = NULL;
+                if (prev != curr){
+                    prev -> next = curr -> next;
+                    curr -> next = NULL;
+                    free(curr);
+                    curr = NULL;
+                } else {
+                    registeredClientList[i].sessionList = curr -> next;
+                    free(curr);
+                    curr = NULL;
+                }
             }
             return 0;
         }    

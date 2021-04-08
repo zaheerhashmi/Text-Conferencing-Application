@@ -23,6 +23,22 @@
 
 char my_username[INPUT_LENGTH];
 
+void process_user_input(char * userInput){
+    if (userInput == NULL){
+            perror("Command unsuccessful"); // empty string read
+            exit(0);
+        }
+
+        pad_space(userInput);
+        // printf("This is the translated string: %s", userInput);
+
+        size_t length = strlen(userInput);
+
+        /* fgets workaround. Sometimes \n is read at the end of buffer, so we wanna replace it with \0*/
+        if (userInput[length - 1] == '\n') {
+            userInput[length - 1] = '\0';
+        }
+}
 void gettime(char * retval){
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
@@ -193,12 +209,12 @@ void get_history(int nargs, char ** args, sock_t sockfd){
     }
 
     if (*clientState == ON_LOCAL){
-        printf(___space___(Cannot get chat history if you do not have history!));
+        printf(___space___(Cannot get chat history if you are not logged in.));
         return;
     }
 
     if (*clientState == ON_SERVER){
-        printf(___space___(We dont got any history brotha));
+        printf(___space___(Cannot get chat history if you are not in any room));
         return;
     }
     struct Message packetStruct;
@@ -210,7 +226,80 @@ void get_history(int nargs, char ** args, sock_t sockfd){
         return;
     }
 }
+
+void send_test(int nargs, char ** args, sock_t sockfd){
+    struct Message packetStruct;
+    char finalPacket[MAXBUFLEN];
+    char inviteData[MAXBUFLEN];
+
+    load_data(&packetStruct, "test");
+
+    /* Construct test packet.*/
+    construct_packet_client(packetStruct, TEST, USERNAME_SET, finalPacket);
+
+    /* Send test message */
+    if(send_data(sockfd, finalPacket) == -1){
+        perror(___space___(Client: Invite failed));
+        return;
+    }
+} // send_test
+
+void send_invite(int nargs, char ** args, sock_t sockfd){
+    if (nargs != 3){
+        printf(___space___(Usage: /invite <sessionID> <inviter>));
+        return;
+    }
+    
+    if (*clientState == ON_LOCAL){
+        printf(___space___(Cannot invite anyone if you are not logged in.));
+        return;
+    }
+
+    if (*clientState == ON_SERVER){
+        printf(___space___(Cannot invite anyone if you are not in room.));
+        return;
+    }
+
+    struct Message packetStruct;
+    char finalPacket[MAXBUFLEN];
+    char inviteData[MAXBUFLEN];
+    strcpy(inviteData, args[1]);
+    strcat(inviteData, ",");
+    strcat(inviteData, args[2]);
+
+    load_data(&packetStruct, inviteData);
+
+    /* Construct invite packet.*/
+    construct_packet_client(packetStruct, INVITE, USERNAME_SET, finalPacket);
+
+    /* Send invite message */
+    if(send_data(sockfd, finalPacket) == -1){
+        perror(___space___(Client: Invite failed));
+        return;
+    }
+} // send_invite
+
+
+void send_invite_response(enum packet_type type, sock_t sockfd){
+    struct Message packetStruct;
+    char finalPacket[MAXBUFLEN];
+    char data[MAXBUFLEN];
+    sprintf(data, "%s,%s", inviteSession, my_username);
+    load_data(&packetStruct, data);
+
+    /* Construct invite packet.*/
+    construct_packet_client(packetStruct, type, USERNAME_SET, finalPacket);
+
+    /* Send invite message */
+    if(send_data(sockfd, finalPacket) == -1){
+        perror(___space___(Client: Invite failed));
+        return;
+    }
+} // send_invite_response
+
 void handle_return_message(char * message, sock_t sockfd){
+    printf(___space___(This is the ack that we have received: %s), message);
+    
     struct Message messageInfo;
     deconstruct_packet(&messageInfo, message);
     char * tempData = malloc(strlen(messageInfo.data) + 1);
@@ -218,7 +307,8 @@ void handle_return_message(char * message, sock_t sockfd){
     int i;
     int type = atoi(messageInfo.type);
     FILE *file;
-
+    
+    pthread_mutex_lock(&mutex);
     switch (type){
         case LO_ACK:
             printf(___space___(Login is successful from %s), messageInfo.source);
@@ -231,6 +321,11 @@ void handle_return_message(char * message, sock_t sockfd){
             clear_server_context(sockfd);
             memset(&my_username[0], 0, sizeof(my_username));
             *clientState = ON_LOCAL;
+            break;
+        case LOGOUT_ACK:
+            *clientState = ON_LOCAL;
+            clear_server_context(sockfd);
+            memset(&my_username[0], 0, sizeof(my_username));
             break;
         case JN_ACK:
             printf(___space___(Welcome to %s good sir %s!), messageInfo.data, messageInfo.source);
@@ -258,6 +353,11 @@ void handle_return_message(char * message, sock_t sockfd){
             strcpy(tempData, messageInfo.data);
             punc_delimit(tempData, 1, args, ",");
             printf(___space___(Left session ID %s -- user still in %s rooms), args[0], args[1]);
+            // break session state if we are in no more rooms
+            int num_rooms = atoi(args[1]);
+            if (num_rooms == 0){
+                *clientState = ON_SERVER;
+            }
             break;
         case LS_NACK:
             printf(___space___(Unable to leave session %s because session does not exist), messageInfo.data);
@@ -280,15 +380,48 @@ void handle_return_message(char * message, sock_t sockfd){
             sprintf(response.data, "===================== %s. Room: %s ===========================\n", localTime, args[0]);
             strcat(response.data, "\n");
             strcat(response.data, args[1]);
+            strcat(response.data, "\n");
             printf(___space___(This is the chat history ->));
             printf(response.data);
+            
+            // Write data
+            FILE * fPtr;
+            // https://stackoverflow.com/questions/27573677/reading-and-appending-to-the-same-file
+            char filename[INPUT_LENGTH];
+            sprintf(filename, "history_%s.txt", my_username);
+            fPtr = fopen(filename, "a");
+            if(fPtr == NULL)
+            {
+                /* File not created hence exit */
+                perror("Unable to create file.\n");
+            }
+            fputs(response.data, fPtr);
+            printf("File history has been saved");
+            fclose(fPtr);
             break;
         case HISTORY_NACK:
             punc_delimit(messageInfo.data, 1, args, "|");
             printf(___space___(Chat history retrieval for Room %s failed because %s), args[0], args[1]);
             break;
-        
+        case INVITEE:
+            punc_delimit(messageInfo.data, 1, args, ",");
+            strcpy(inviteSession, args[0]); // Exepcting session
+            strcpy(inviter, args[1]); // Expecting zaheer
+            recv_invite = true;
+            pthread_mutex_lock(&dummy_mutex);
+            printf(___space___(You have a pending invite. Finish your next command or press enter to see the invite.)); 
+            pthread_cond_wait(&client_response, &dummy_mutex);
+            pthread_mutex_unlock(&dummy_mutex); // wait one at a time
+            // printf(___space___(INVITEE response has been recorded));
+            /** --------------------------
+             * INVITEE response has been 
+             * recorded
+             * --------------------------- */
+            break;
+        case IN_ACK:
+            printf(___space___(User %s acknowledged your invitation to room %s), args[0], args[1]); 
     } // switch
+    pthread_mutex_unlock(&mutex);
 }
 
 /* This function most likely has to return the socket that we want to access */
@@ -503,30 +636,14 @@ void logout(int nargs, char ** args, sock_t sockfd){
         logged in. No need to destroy server variables.));
         return;
     }
-
-    if (*clientState == IN_SESSION){
-        leave_session(2, args, sockfd);
-        if (*clientState == IN_SESSION){
-            // This shouldn't happen since we set clientState on the client side
-            // And we don't need an ACK
-            clear_server_context(sockfd);
-            printf(___space___(Failed to leave room));
-            return;
-        }
-    }
     
-    if (*clientState == ON_SERVER){
-        strcpy(messageInfo.data, "");
-        construct_packet_client(messageInfo, EXIT, USERNAME_SET, finalPacket);
-        if(send_data(sockfd, finalPacket) == -1){
-            perror(___space___(Client: send));
-            clear_server_context(sockfd);
-            return;
-        } 
-        printf(___space___(User %s has logged out.), my_username);
-    }
-    *clientState = ON_LOCAL;
-    clear_server_context(sockfd);
+    strcpy(messageInfo.data, "");
+    construct_packet_client(messageInfo, EXIT, USERNAME_SET, finalPacket);
+    if(send_data(sockfd, finalPacket) == -1){
+        perror(___space___(Client: send));
+        clear_server_context(sockfd);
+        return;
+    } 
 }
 
 void *receive_loop(void * sockfd_pointer){
@@ -541,7 +658,7 @@ void *receive_loop(void * sockfd_pointer){
     char message[MAXBUFLEN + MAXBUFLEN/2 + 1];
     int numbytes = 0;
     fd_set select_fds;
-    double timeoutInterval = 300; // Timeout interval is set to 1 hour for the time being.
+    double timeoutInterval = 3600; // Timeout interval is set to 1 hour for the time being.
     struct timeval timeout;
     /* Recv from server. If there is no response in 10s, close socket and quit. */
     FD_ZERO(&select_fds);
@@ -577,8 +694,8 @@ void *receive_loop(void * sockfd_pointer){
                     clear_server_context(*sockfd);
                     return NULL;
                 }
-
                 handle_return_message(message, *sockfd);
+        
                 count++;
                 break;
         } // switch
@@ -644,7 +761,7 @@ void join_session(int nargs, char ** args, sock_t sockfd){
 
 void leave_session(int nargs, char ** args, sock_t sockfd){
     if (nargs != 2){
-        printf(___space___(Usage: /leavesession <session_id));
+        printf(___space___(Usage: /leavesession <session_id>));
         return;
     }
 

@@ -44,6 +44,7 @@ void message_handler(struct Message* packetStruct,int clientFD, fd_set* master);
 void message_all_handler(struct Message * packetStruct, int clientFD, fd_set *master);
 void query_handler(int clientFD, fd_set* master);
 void history_handler(char * sessionID, int clientFD, fd_set* master);
+void delete_history_if_session_doesnt_exist(char * sessionID);
 
 // Session ID functions //
 void add_session_id(struct Message * packetStruct, int i);

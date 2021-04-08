@@ -25,6 +25,7 @@ enum packet_type{
     LOGIN,
     LO_ACK,
     LO_NAK,
+    LOGOUT_ACK,
     EXIT,
     JOIN,
     JN_ACK,
@@ -43,6 +44,11 @@ enum packet_type{
     HISTORY,
     HISTORY_ACK,
     HISTORY_NACK,
+    INVITE,
+    INVITEE,
+    IN_ACK,
+    IN_NACK,
+    TEST
 };
 
 /** -------------------------------------------

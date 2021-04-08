@@ -47,6 +47,23 @@ struct IPInfo info;
 int roomNumbers;
 // get sockaddr, IPv4 or IPv6:
 
+void pad_space(char * input){
+    char * copy = input;
+
+    /* Move copy till we end */
+    while (*copy == ' '){
+        copy++;
+    }
+
+    while (true){
+        *input = *copy;
+        input++;
+        copy++;
+        if (*copy == '\0'){
+            return;
+        }
+    } // while
+} // pad_space
 void gettime(char * retval){
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
@@ -310,7 +327,7 @@ int get_active(){
 
 void message_processing(char* message, int clientFD, struct sockaddr_storage remoteaddr,fd_set* master, int fdmax, int listener){
     pthread_mutex_lock(&mutex);
-    // printf(___space___(This is the message that we are receiving: %s), message);
+    printf(___space___(This is the message that we are receiving: %s), message);
 	// Loading up message struct // 
 	struct Message packetStruct;
 	deconstruct_packet(&packetStruct,message);
@@ -349,6 +366,30 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
 		query_handler(clientFD, master);
 	} else if(atoi(packetStruct.type) == HISTORY){
         history_handler((packetStruct.data), clientFD, master);
+    } else if (atoi(packetStruct.type) == TEST){
+
+        struct Message responseMessage;
+        // Send Acknowledgement of creation of a new session // 
+        sprintf(responseMessage.type,"%d", INVITEE);
+        strcpy(responseMessage.data, "turtle"); // Session ID
+        strcat(responseMessage.data, ",");
+        strcat(responseMessage.data, "zaheer"); // User
+        sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+        strcpy(responseMessage.source,"I don't care");
+
+        char* acknowledgement = strcat(responseMessage.type,":");
+        strcat(acknowledgement,responseMessage.size);
+        strcat(acknowledgement,":");
+        strcat(acknowledgement,responseMessage.source);
+        strcat(acknowledgement,":");
+        strcat(acknowledgement,responseMessage.data);
+        printf(acknowledgement);
+                    
+        if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+            perror("send");
+            // Done with this we can return now //
+            return;
+        }
     }
     pthread_mutex_unlock(&mutex);
 
@@ -596,21 +637,63 @@ void login_handler(struct Message* packetStruct,int clientFD, struct sockaddr_st
 }
 
 void exit_handler(int clientFD, fd_set* master){
-    int i;
-    // Close the socket and remove it from the master set //
-    close(clientFD);
-    FD_CLR(clientFD,master);
-
+    int i,j;
     // Find the the client in register and update // 
-    for(i =0; i<5; i++){
+    for(i=0; i<5; i++){
         if(registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            // Gather sessions for chat history
+            char * sessions = list_sessions(i);
+            char * temp = (char *)malloc(MAXBUFLEN * sizeof(char));
+            strcpy(temp, sessions);
+            // Download every single session file to local
+            for (j=0; true; j++){
+                char * session = strsep(&temp, ",");
+                pad_space(session);
+                if (session == NULL || strlen(session) == 0) break;
+                history_handler(session, clientFD, master);
+            }
+            // Delete session IDS
+            delete_all_session_ids(i);
+
+            // Delete histories
+            for (j=0; true; j++){
+                char * session = strsep(&sessions, ",");
+                pad_space(session);
+                if (session == NULL || strlen(session) == 0) break;
+                delete_history_if_session_doesnt_exist(session);
+            }
+            
+            // NULL values
             registeredClientList[i].activeStatus = 0;
             registeredClientList[i].portNumber = 0;
             memset(&registeredClientList[i].clientIP[0], 0, sizeof(registeredClientList[i].clientIP));
-            delete_all_session_ids(i);
-            return;
+            struct Message responseMessage;
+            // ACKNOWLEDGE logout
+            // Send Acknowledgement of creation of a new session // 
+            sprintf(responseMessage.type,"%d", LOGOUT_ACK);
+            strcpy(responseMessage.data, ""); // Session ID
+            sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+            strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+            char* acknowledgement = strcat(responseMessage.type,":");
+            strcat(acknowledgement,responseMessage.size);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.source);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.data);
+                        
+            if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                perror("send");
+                // Done with this we can return now //
+                return;
             }
+            break;
         }
+    }
+
+    // Close the socket and remove it from the master set //
+    close(clientFD);
+    FD_CLR(clientFD,master);
     return;
 }
 
@@ -698,9 +781,35 @@ void newsess_handler(struct Message * packetStruct, int clientFD, fd_set* master
     return;
 }
 
+void delete_history_if_session_doesnt_exist(char * sessionID){
+    int j;
+    bool sessionStillExists = false;
+
+    // Remove text file if sessionID doesn't exist in any client  
+    for (j = 0; j < 5; j++){
+        if (look_for_sessionID(sessionID, j)){
+            sessionStillExists = true;
+            break;
+        }
+    } // for
+
+    if (!sessionStillExists){
+        char sessionFile[INPUT_LENGTH];
+        sprintf(sessionFile, "%s.txt", sessionID);
+        int del = remove(sessionFile);
+        if (!del)
+            printf("The file %s is Deleted successfully", sessionFile);
+        else
+            printf("the file %s is not Deleted", sessionFile);
+        
+    }
+
+}
+                
+
 void leavesess_handler(struct Message * packetStruct, int clientFD, fd_set* master){
     // Check client isnt malicious // 
-    int i= 0;
+    int i = 0, j = 0;
     int err;
     struct Message responseMessage;
     char * clientID = (char *)malloc(MAXBUFLEN); 
@@ -708,6 +817,11 @@ void leavesess_handler(struct Message * packetStruct, int clientFD, fd_set* mast
 
     for(i =0; i<5; i++){
         if(clientFD == registeredClientList[i].portNumber && registeredClientList[i].activeStatus == 1){
+            // download history and delete session if required before we leave
+            if(look_for_sessionID(packetStruct -> data, i)){
+                history_handler(packetStruct -> data, clientFD, master);
+            }
+            
             if(delete_session_id(packetStruct, i) == -1){
                 // Unsuccessful // 
                 sprintf(responseMessage.type,"%d",LS_NACK);
@@ -747,7 +861,10 @@ void leavesess_handler(struct Message * packetStruct, int clientFD, fd_set* mast
                 strcat(acknowledgement,responseMessage.data);
                 if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
                     perror("send");
-                }            
+                }          
+
+                delete_history_if_session_doesnt_exist(packetStruct -> data);   
+
             }
             return;
             

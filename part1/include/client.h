@@ -17,7 +17,12 @@ extern char current_session[INPUT_LENGTH];
 extern struct IPInfo info;
 extern enum state * clientState;
 extern pthread_mutex_t mutex;
+extern pthread_mutex_t dummy_mutex;
+extern pthread_cond_t client_response;
 extern bool forked;
+extern bool recv_invite;
+extern char inviteSession[MAXBUFLEN];
+extern char inviter[MAXBUFLEN];
 
 /** -------------------------------------------
  *  Client Functions
@@ -41,6 +46,11 @@ void send_text(int nargs, char ** args, sock_t);
 void send_text_all(char * message, sock_t);
 void get_history(int nargs, char ** args, sock_t);
 void clear_server_context(sock_t sockfd);
+void process_user_input(char * userInput);
+void send_invite(int nargs, char ** args, sock_t sockfd);
+void send_invite_response(enum packet_type, sock_t);
+void send_test(int nargs, char ** args, sock_t);
+void pad_space(char * input);
 void print_menu();
 void print_short_menu();
 

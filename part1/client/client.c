@@ -21,7 +21,13 @@
 struct IPInfo info;
 enum state * clientState;
 bool forked = false;
+bool recv_invite = false;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t dummy_mutex = PTHREAD_MUTEX_INITIALIZER; // This is so that when we wait for client response
+// We would not get any other messages
+pthread_cond_t client_response = PTHREAD_COND_INITIALIZER;
+char inviteSession[MAXBUFLEN];
+char inviter[MAXBUFLEN];
 
 // void print_session(){
 //     printf("\n");
@@ -43,6 +49,7 @@ void print_menu(){
     printf("/quit \t --- \t Terminate the program\n");
     printf("/send \t --- \t Send the message to specific rooms\n");
     printf("/history \t --- \t Get the chat history of a specific room.\n");
+    printf("/invite \t --- \t Invite an active, logged-in client to a specific room.\n");
     printf("<text> \t --- \t Send a message to all sessions the client is in. The message is sent after the new line\n");
     printf("\n");
     printf("To see a shorter version of the menu, press /s.");
@@ -53,7 +60,7 @@ void print_menu(){
 
 void print_short_menu(){
     printf("\n");
-    printf("/login /logout /joinsession /leavesession /createsession /list /quit /send /history <text>\n");
+    printf("/login /logout /joinsession /leavesession /createsession /list /quit /send /invite /history <text>\n");
     printf("\n");
     printf("To see a longer version of the menu, press /s.");
     printf("\n");
@@ -131,8 +138,6 @@ int main(int argc, char *argv[]){
         exit(1);
     }
 
-    
-
     /* Wait for user input*/
     char * text = (char *) malloc(INPUT_LENGTH * sizeof(char));
     char * userInput = (char *) malloc(INPUT_LENGTH * sizeof(char));
@@ -146,22 +151,45 @@ int main(int argc, char *argv[]){
             if (!shortVersion) print_menu(); else print_short_menu();
             printf(___space___(The client is running on %s at %s), info.hostname, info.IP);
         }
-
-        fgets(userInput, INPUT_LENGTH, stdin);
-        if (userInput == NULL){
-            perror("Command unsuccessful"); // empty string read
-            exit(0);
+        
+        /** -------------------------------
+         *  Get command for user. 
+         *  
+         * -------------------------------- */
+        // printf("%d", recv_invite);
+        if (!recv_invite){
+            fgets(userInput, INPUT_LENGTH, stdin);
+            process_user_input(userInput);
+        } else {
+            /* When an invite is received, it would always come AFTER a command input*/
+            printf(___space___(You have receive an invite from %s to Room %s. Press Y to accept or N to decline), inviter, inviteSession);
+            while (1){
+                fgets(userInput, INPUT_LENGTH, stdin);
+                process_user_input(userInput);
+                if (!strcmp(userInput, "Y") || !strcmp(userInput, "y")){
+                    send_invite_response(IN_ACK, sockfd);
+                    args[1] = (char *) malloc(MAXBUFLEN*sizeof(char));
+                    strcpy(args[1], inviteSession);
+                    join_session(2, args, sockfd);
+                    break;
+                    // send IN ACK
+                } else if(!strcmp(userInput, "N") || !strcmp(userInput, "n")){
+                    send_invite_response(IN_NACK, sockfd);
+                    // send IN NACK
+                    break;
+                } else {
+                    printf(___space___(Please enter a valid string: Y to accept or N to decline));
+                    continue;
+                }
+            } // while
+            // Client response has been registered
+            pthread_cond_signal(&client_response);
+            pthread_mutex_unlock(&dummy_mutex);
+            recv_invite = false;
+            continue;
         }
+        
 
-        pad_space(userInput);
-        // printf("This is the translated string: %s", userInput);
-
-        size_t length = strlen(userInput);
-
-        /* fgets workaround. Sometimes \n is read at the end of buffer, so we wanna replace it with \0*/
-        if (userInput[length - 1] == '\n') {
-            userInput[length - 1] = '\0';
-        }
         
         /**
          * Strsep will mess up the original string in get_command,
@@ -204,8 +232,14 @@ int main(int argc, char *argv[]){
             send_text(nargs, args, sockfd);
         } else if (!strcmp("/history", commandOfInterest)){
             get_history(nargs, args, sockfd);
+        } else if (!strcmp("/invite", commandOfInterest)){
+            send_invite(nargs, args, sockfd);
+        } else if (!strcmp("/test", commandOfInterest)) {
+            send_test(nargs, args, sockfd);
         } else {
-            if (*(userInput) == '/'){
+            if (strlen(userInput) == 0){
+                printf("");
+            } else if (*(userInput) == '/'){
                 printf("Invalid command, please try again\n");
             } else {
                 send_text_all(text, sockfd);
