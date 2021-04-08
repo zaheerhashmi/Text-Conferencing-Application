@@ -346,15 +346,163 @@ void message_processing(char* message, int clientFD, struct sockaddr_storage rem
     }
 
 	else if(atoi(packetStruct.type) == QUERY){
-		query_handler(clientFD, master);
-	} else if(atoi(packetStruct.type) == HISTORY){
+		query_handler(clientFD, master);   
+	}
+    
+    else if(atoi(packetStruct.type) == HISTORY){
         history_handler((packetStruct.data), clientFD, master);
     }
+
+    else if (atoi(packetStruct.type) == INVITE){
+        invite_handler((packetStruct.data),clientFD,master);
+    }
+
     pthread_mutex_unlock(&mutex);
 
 }
 
 /////////////////////////////////////////////////// HELPER FUNCTIONS /////////////////////////////////////////////////
+
+void send_invite(char* guest, char* inviter){
+
+int i;
+int portNumber;
+
+// Obtain the socket of the guest // 
+
+for (i = 0; i < 5; i++){
+    if(!(strcmp(guest,registeredClientList[i].clientID))){
+        registeredClientList[i].portNumber = portNumber;
+        break;
+        }
+    }
+
+    struct Message responseMessage;
+    sprintf(responseMessage.type,"%d",INVITE);
+    strcpy(responseMessage.data,guest);
+    strcat(responseMessage.data,",");
+    strcat(responseMessage.data,inviter);
+    sprintf(responseMessage.size,"%d",strlen(responseMessage.data));
+    strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+     char * invite = (char *)malloc(MAXBUFLEN);
+     strcpy(invite, "");
+     strcat(invite, responseMessage.type);
+     strcat(invite, ":");
+     strcat(invite,responseMessage.size);
+     strcat(invite,":");
+     strcat(invite,responseMessage.source);
+     strcat(invite,":");
+     strcat(invite,responseMessage.data);
+
+    printf("%s", invite);
+    if (send(portNumber,invite, MAXBUFLEN, 0) == -1) {
+        perror("send");
+        // Done with this we can return now //
+        return;
+    }
+}
+
+void invite_handler(char* packetData, int clientFD, fd_set* master){
+    
+    // Error Checking: Check if the iniviter isActive && the sessionID exists//
+    // If the above is true then check if the invitee isActive; if they are then send the inivitation//
+
+    int i;
+    int j;
+    char* sessionID = (char *) malloc(MAXBUFLEN);
+    char* guest = (char *) malloc(MAXBUFLEN);
+    struct Message responseMessage;
+    char* token;
+
+    // Obtaining sessionID and guest name from the data sent by the iniviter // 
+        // Obtaining the clientID and password from the message sent by the client //
+    for(i = 0; i < 2 ; i++){
+        token = strsep(&(packetData), ",");
+        if (token == NULL) break;
+        if (i == 0)
+            strcpy(sessionID, token);
+        else if (i == 1)
+            strcpy(guest, token);
+    } 
+
+    // Loop through and ensure that the inviter isActive and session ID exists // 
+        for (i=0;i<5;i++){
+        if (registeredClientList[i].portNumber == clientFD && registeredClientList[i].activeStatus == 1){
+            break;
+        }
+    }
+
+    // Check if sessionID is valid // 
+    int validSession = look_for_sessionID(sessionID,i);
+    int activeGuest = 0;
+
+    // Check if guest is Active // 
+
+        for(j=0; j<5; j++){
+            if(!(strcmp(guest,registeredClientList[j].clientID) && registeredClientList[j].activeStatus == 1)){
+                activeGuest = 1;
+            }
+        }
+
+    // If sessionID is valid and guest isActive send invite to guest // 
+
+    if (validSession && activeGuest ){
+        char* inviter = registeredClientList[i].clientID;
+        send_invite(guest,inviter);
+    }
+
+    // Invalid sessionID -> Send IN_NACK to inviter with message "Invalid sessionID" // 
+    else if(validSession == 0){
+            sprintf(responseMessage.type,"%d",IN_NACK);
+            strcpy(responseMessage.data, "Invalid sessionID"); // Session ID
+            sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+            strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+            char* acknowledgement = strcat(responseMessage.type,":");
+            strcat(acknowledgement,responseMessage.size);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.source);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.data);
+            
+            printf("%s", acknowledgement);
+            if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                perror("send");
+                // Done with this we can return now //
+                return;
+            }
+    }
+
+    // Inactive guest -> Send IN_NACK to inviter with message "Guest inactive"
+    else if(activeGuest == 0){
+
+            sprintf(responseMessage.type,"%d",IN_NACK);
+            strcpy(responseMessage.data, "Guest is inactive"); // Session ID
+            sprintf(responseMessage.size,"%d",sizeof(responseMessage.data));
+            strcpy(responseMessage.source,registeredClientList[i].clientID);
+
+            char* acknowledgement = strcat(responseMessage.type,":");
+            strcat(acknowledgement,responseMessage.size);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.source);
+            strcat(acknowledgement,":");
+            strcat(acknowledgement,responseMessage.data);
+            
+            printf("%s", acknowledgement);
+            if (send(clientFD,acknowledgement, MAXBUFLEN, 0) == -1) {
+                perror("send");
+                // Done with this we can return now //
+                return;
+            }
+    } 
+
+}
+
+
+
+
+
 
 void history_handler(char * sessionID, int clientFD, fd_set* master){
     int i;

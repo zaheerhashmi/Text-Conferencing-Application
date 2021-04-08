@@ -43,6 +43,9 @@ enum packet_type{
     HISTORY,
     HISTORY_ACK,
     HISTORY_NACK,
+    INVITE,
+    IN_ACK,
+    IN_NACK
 };
 
 /** -------------------------------------------
